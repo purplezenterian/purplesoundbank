@@ -738,8 +738,8 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
       }
     }
     lit(note, 1);
-    // 32-voice polyphony: past 32 notes the oldest one is let go.
-    while (active.size + sustained.size > 32) {
+    // Polyphony: past 48 notes (held + pedal-sustained) the oldest one is let go.
+    while (active.size + sustained.size > 48) {
       const old = sustained.size ? sustained.values().next().value : active.values().next().value;
       if (!old || old === v) break;
       if (sustained.has(old)) release(old);
@@ -1924,7 +1924,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
 /* Auto-update: the website checks for a newer version every 15 s and reloads itself
    when nothing is being played. Settings are saved, so nothing is lost. */
 (() => {
-  const BUILD = '1794352716';
+  const BUILD = '1794353191';
   if (!/^https?:$/.test(location.protocol)) return;
   async function check() {
     try {
