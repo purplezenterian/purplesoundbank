@@ -118,8 +118,10 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
 .ctl { grid-area: ctl; }
 .aux { grid-area: aux; display: grid; grid-template-columns: repeat(5, minmax(0, 56px)); justify-content: space-evenly; align-items: start; gap: 4px; min-width: 0; }
 .mid .adsr { grid-area: adsr; }
+.mid.noaux .aux { display: none; }
 @media (max-width: 599px) {
   .mid { grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "ctl adsr" "aux aux"; }
+  .mid.noaux { grid-template-areas: "ctl adsr"; row-gap: 0; }
   .mid .adsr { justify-self: end; width: 100%; max-width: 188px; }
   .aux { border-top: 1px solid var(--line); padding-top: 10px; }
 }
@@ -750,6 +752,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
   }
   function setMode(next) {
     mode = next;
+    document.querySelector('.mid').classList.toggle('noaux', mode === 'aux');
     const m = MODES[mode];
     for (let i = 0; i < 5; i++) {
       clearTimeout(flashT[i]);
@@ -1120,7 +1123,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
 /* Auto-update: the website checks for a newer version every 15 s and reloads itself
    when nothing is being played. Settings are saved, so nothing is lost. */
 (() => {
-  const BUILD = '1794327734';
+  const BUILD = '1794327898';
   if (!/^https?:$/.test(location.protocol)) return;
   async function check() {
     try {
