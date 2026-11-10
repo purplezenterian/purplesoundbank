@@ -364,15 +364,17 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
       tail.connect(bq); tail = bq;
     }
     // Mod wheel routing per sound: 'vibrato' (default), 'cutoff' (wheel opens a low-pass) or 'none'.
-    let modLP = null, modHS = null, modAir = null;
+    let modLP = null, modHS = null, modAir = null, modSweep = null, modLS = null;
     if (s.mod === 'cutoff') {
       modLP = ctx.createBiquadFilter();
-      modLP.type = 'lowpass'; modLP.frequency.value = 60; modLP.Q.value = 4;
+      modLP.type = 'lowpass'; modLP.frequency.value = 20000; modLP.Q.value = 0.5;   // stays open: wheel down = the pad's own sound
       tail.connect(modLP); tail = modLP;
       // Highs that bloom as the wheel goes up.
       modHS = ctx.createBiquadFilter(); modHS.type = 'highshelf'; modHS.frequency.value = 2500; modHS.gain.value = 0;
       modAir = ctx.createBiquadFilter(); modAir.type = 'peaking'; modAir.frequency.value = 7500; modAir.Q.value = 0.7; modAir.gain.value = 0;
-      tail.connect(modHS); modHS.connect(modAir); tail = modAir;
+      modSweep = ctx.createBiquadFilter(); modSweep.type = 'peaking'; modSweep.frequency.value = 300; modSweep.Q.value = 2.5; modSweep.gain.value = 0;
+      modLS = ctx.createBiquadFilter(); modLS.type = 'lowshelf'; modLS.frequency.value = 220; modLS.gain.value = 0;
+      tail.connect(modLS); modLS.connect(modSweep); modSweep.connect(modHS); modHS.connect(modAir); tail = modAir;
     }
     tail.connect(master);
     // Analog character (not on the Purple Grand): soft tube-style saturation that bites harder the harder you play,
@@ -388,7 +390,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
       sat.connect(warm); warm.connect(soft); soft.connect(out);
       inp = sat;
     }
-    return { inp, modLP, modHS, modAir, mod: s.mod || 'vibrato', analog: !!s.analog, id: s.id, name: s.name, samples: s.samples, buffers: new Map(), keys: [], ready: false,
+    return { inp, modLP, modHS, modAir, modSweep, modLS, mod: s.mod || 'vibrato', analog: !!s.analog, id: s.id, name: s.name, samples: s.samples, buffers: new Map(), keys: [], ready: false,
              vol: store.get('vol.' + s.id, 1), mute: false, solo: false, out,
              trim: s.trim || 1, human: !!s.human, fat: !!s.fat, loop: s.loop || null, rel: s.rel || 0.09, loops: new Map(),
              env0: { a: 0, d: 0.5, s: 1, r: +((s.rel || 0.09) * 4).toFixed(2) } };
@@ -1315,8 +1317,16 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
     $('w-mod-f').style.height = (modVal * 100) + '%';
     wm.classList.toggle('live', modVal > 0.01);
     modGain.gain.setTargetAtTime(modVal * 45, ctx.currentTime, 0.02);   // up to 45 cents of vibrato
-    for (const c of channels) if (c.modHS) { c.modHS.gain.setTargetAtTime(modVal * 22, ctx.currentTime, 0.03); c.modAir.gain.setTargetAtTime(modVal * 9, ctx.currentTime, 0.03); }
-    for (const c of channels) if (c.modLP) c.modLP.frequency.setTargetAtTime(60 * Math.pow(333.3, modVal), ctx.currentTime, 0.025);   // 60 Hz shut -> 20 kHz wide open, with resonance
+    for (const c of channels) if (c.modHS) {
+      const T = ctx.currentTime, m = modVal;
+      // Wheel at the bottom: the pad exactly as it is. Wheel up: a bright resonant sweep rises through the highs,
+      // the top end blooms and the low end steps back so it feels wide open.
+      c.modSweep.frequency.setTargetAtTime(300 * Math.pow(40, m), T, 0.025);
+      c.modSweep.gain.setTargetAtTime(Math.min(1, m * 4) * 15, T, 0.025);
+      c.modHS.gain.setTargetAtTime(m * 24, T, 0.03);
+      c.modAir.gain.setTargetAtTime(m * 10, T, 0.03);
+      c.modLS.gain.setTargetAtTime(-m * 8, T, 0.03);
+    }
   }
   const wheelT = (e, el) => { const r = el.getBoundingClientRect(); return Math.min(1, Math.max(0, 1 - (e.clientY - r.top - 17) / (r.height - 52))); };
   let springId = 0;
@@ -1533,7 +1543,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
 /* Auto-update: the website checks for a newer version every 15 s and reloads itself
    when nothing is being played. Settings are saved, so nothing is lost. */
 (() => {
-  const BUILD = '1794334322';
+  const BUILD = '1794334474';
   if (!/^https?:$/.test(location.protocol)) return;
   async function check() {
     try {
