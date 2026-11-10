@@ -323,7 +323,16 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
   master.connect(hp); hp.connect(hs); hs.connect(eq[0]);
   for (let i = 0; i < eq.length - 1; i++) eq[i].connect(eq[i + 1]);
   const fxIn = ctx.createGain();
-  eq[eq.length - 1].connect(fxIn);
+  // Tremolo (replaces the old Chorus knob): one shared 5.5 Hz LFO; each stage gets its own depth.
+  const tremLFO = ctx.createOscillator(); tremLFO.frequency.value = 5.5; tremLFO.start();
+  function makeTrem() {
+    const g = ctx.createGain(), d = ctx.createGain();
+    g.gain.value = 1; d.gain.value = 0;
+    tremLFO.connect(d); d.connect(g.gain);
+    return { g, setDepth: (n, tc) => { const dep = Math.min(1, Math.max(0, n)) * 0.9; g.gain.setTargetAtTime(1 - dep / 2, ctx.currentTime, tc || 0.03); d.gain.setTargetAtTime(dep / 2, ctx.currentTime, tc || 0.03); } };
+  }
+  const gTrem = makeTrem();
+  eq[eq.length - 1].connect(gTrem.g); gTrem.g.connect(fxIn);
   const fxSum = ctx.createGain();
   fxIn.connect(fxSum);
 
@@ -437,6 +446,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
     tail.connect(chHP); chHP.connect(chHS); chHS.connect(chEQ[0]);
     for (let i = 0; i < chEQ.length - 1; i++) chEQ[i].connect(chEQ[i + 1]);
     tail = chEQ[chEQ.length - 1];
+    const chTrem = makeTrem(); tail.connect(chTrem.g); tail = chTrem.g;
     if (s.wide) {
       // Mid/side widening: keep the centre, boost the sides so the whole sound spreads out.
       const sp = ctx.createChannelSplitter(2), mg = ctx.createChannelMerger(2);
@@ -494,7 +504,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
     // Poly sounds (pads): gain follows the number of sounding voices, so 32 notes plus their ringing tails stay clean.
     let polyG = null;
     if (s.poly) { polyG = ctx.createGain(); polyG.connect(inp); inp = polyG; }
-    return { modKnob: s.modKnob || null, modLPs, modRange: s.modRange || [300, 1000], modReso: s.modReso || 0, modMk: s.modMk || [0, 0], modTrim, dbgTail, chEQ, chHP, chHS, chSend, revSend, fxo: { cutoff: 20000, reso: 0, env: 0 }, polyG, alive: 0, held: 0, vox: [], inp, modLP, modHS, modAir, modSweep, modLS, mod: s.mod || 'vibrato', analog: !!s.analog, id: s.id, name: s.name, cat: s.cat || '', samples: s.samples, buffers: new Map(), keys: [], ready: false,
+    return { chTrem, modKnob: s.modKnob || null, modLPs, modRange: s.modRange || [300, 1000], modReso: s.modReso || 0, modMk: s.modMk || [0, 0], modTrim, dbgTail, chEQ, chHP, chHS, chSend, revSend, fxo: { cutoff: 20000, reso: 0, env: 0 }, polyG, alive: 0, held: 0, vox: [], inp, modLP, modHS, modAir, modSweep, modLS, mod: s.mod || 'vibrato', analog: !!s.analog, id: s.id, name: s.name, cat: s.cat || '', samples: s.samples, buffers: new Map(), keys: [], ready: false,
              vol: store.get('vol.' + s.id, 1), mute: false, solo: false, out,
              trim: s.trim || 1, human: !!s.human, velDeep: !!s.velDeep, drift: !!s.drift, fat: !!s.fat, loop: s.loop || null, fatPan: s.fatPan || 0, fatSpread: s.fatSpread || 0, fatOffset: !!s.fatOffset, tame: !!s.tame, rel: s.rel || 0.09, loops: new Map(),
              env0: { a: 0, d: 0.5, s: 1, r: +((s.rel || 0.09) * 4).toFixed(2) } };
@@ -989,7 +999,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
       apply: (i, n) => eq[i].gain.setTargetAtTime((n - 0.5) * 48, ctx.currentTime, 0.02)
     },
     fx: {
-      names: ['Cutoff', 'Reso', 'Fltr Env', 'Chorus', 'Verb'],
+      names: ['Cutoff', 'Reso', 'Fltr Env', 'Tremolo', 'Verb'],
       def: [0.5, 0, 0, 0, 0],
       snapFn: i => i === 0 ? 0.5 : undefined,
       fmt: (i, n) => i === 0 ? (n < 0.495 ? 'LP ' + fmtHz(cutoffHz(n * 2)) : n > 0.505 ? 'Highs +' + Math.round((n - 0.5) * 36) + ' dB' : 'Open') : pct(n),
@@ -1008,7 +1018,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
         }
         else if (i === 1) { fx.reso = n; updateFilters(); }
         else if (i === 2) fx.env = n;
-        else if (i === 3) chSendG.gain.setTargetAtTime(n * 0.8, ctx.currentTime, 0.03);
+        else if (i === 3) gTrem.setDepth(n);
         else revSendG.gain.setTargetAtTime(n * 0.9, ctx.currentTime, 0.03);
       }
     }
@@ -1025,6 +1035,8 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
   }
   // One-time: EQ back to flat after its range was widened, so old knob positions don't hit twice as hard.
   if (!store.get('eqv2', false)) { MODES.eq.val = [0.5, 0.5, 0.5, 0.5, 0.5]; store.set('knobs.eq', MODES.eq.val); store.set('eqv2', true); }
+  // One-time: the old Chorus amount must not turn into Tremolo depth.
+  if (!store.get('tremv1', false)) { MODES.fx.val[3] = 0; store.set('knobs.fx', MODES.fx.val); store.set('tremv1', true); }
   // Apply saved EQ and FX settings to the sound right away.
   for (const key of ['eq', 'fx']) MODES[key].val.forEach((n, i) => MODES[key].apply(i, n));
 
@@ -1034,7 +1046,9 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
     c.fxs = { eq: store.get('sfx.' + c.id + '.eq', [0.5, 0.5, 0.5, 0.5, 0.5]).slice(0, 5), fx: store.get('sfx.' + c.id + '.fx', [0.5, 0, 0, 0, 0]).slice(0, 5) };
     while (c.fxs.eq.length < 5) c.fxs.eq.push(0.5);
     while (c.fxs.fx.length < 5) c.fxs.fx.push(0);
+    if (!store.get('tremv1c', false)) c.fxs.fx[3] = 0;
   }
+  store.set('tremv1c', true);
   function applySound(c, key, i, n) {
     const T = ctx.currentTime;
     if (key === 'eq') { c.chEQ[i].gain.setTargetAtTime((n - 0.5) * 48, T, 0.02); return; }
@@ -1046,7 +1060,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
     }
     else if (i === 1) { c.fxo.reso = n; updateFilters(); }
     else if (i === 2) c.fxo.env = n;
-    else if (i === 3) c.chSend.gain.setTargetAtTime(n * 0.8 * 0.8, T, 0.03);
+    else if (i === 3) c.chTrem.setDepth(n);
     else c.revSend.gain.setTargetAtTime(n * 0.9 * 0.8, T, 0.03);
   }
   for (const c of channels) for (const key of ['eq', 'fx']) c.fxs[key].forEach((n, i) => applySound(c, key, i, n));
@@ -1824,7 +1838,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
 /* Auto-update: the website checks for a newer version every 15 s and reloads itself
    when nothing is being played. Settings are saved, so nothing is lost. */
 (() => {
-  const BUILD = '1794347678';
+  const BUILD = '1794348326';
   if (!/^https?:$/.test(location.protocol)) return;
   async function check() {
     try {
