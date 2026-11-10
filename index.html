@@ -325,19 +325,35 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
   const fxIn = ctx.createGain();
   // Tremolo (replaces the old Chorus knob): one shared 5.5 Hz LFO; each stage gets its own depth.
   const tremLFO = ctx.createOscillator(); tremLFO.frequency.value = 5.5; tremLFO.start();
+  // Strength: sharpens the LFO from a gentle sine towards a hard chop and pushes depth to full.
+  const tremShape = ctx.createWaveShaper(); tremLFO.connect(tremShape); tremShape.oversample = '2x';
+  let tremStrength = 0; const allTrems = [];
+  function setTremStrength(s) {
+    tremStrength = s;
+    const k = 1 + s * 24, N = 1024, cv = new Float32Array(N), nrm = Math.tanh(k);
+    for (let i = 0; i < N; i++) { const x = i / (N - 1) * 2 - 1; cv[i] = Math.tanh(k * x) / nrm; }
+    tremShape.curve = cv;
+    for (const tr of allTrems) tr.refresh();
+  }
   // Wide (stereo) tremolo: the left and right sides pulse in opposite phase, so the sound swings across the speakers.
   function makeTrem() {
     const inp = ctx.createGain(); inp.channelCount = 2; inp.channelCountMode = 'explicit'; inp.channelInterpretation = 'speakers';
     const sp = ctx.createChannelSplitter(2), mg = ctx.createChannelMerger(2);
     const gL = ctx.createGain(), gR = ctx.createGain(), dL = ctx.createGain(), dR = ctx.createGain();
     gL.gain.value = 1; gR.gain.value = 1; dL.gain.value = 0; dR.gain.value = 0;
-    tremLFO.connect(dL); tremLFO.connect(dR); dL.connect(gL.gain); dR.connect(gR.gain);
+    tremShape.connect(dL); tremShape.connect(dR); dL.connect(gL.gain); dR.connect(gR.gain);
+    let nn = 0, lastTc = 0.03;
     inp.connect(sp); sp.connect(gL, 0); sp.connect(gR, 1); gL.connect(mg, 0, 0); gR.connect(mg, 0, 1);
-    return { inp, out: mg, setDepth: (n, tc) => {
-      const dep = Math.min(1, Math.max(0, n)) * 0.95, T = ctx.currentTime, k = tc || 0.03;
+    const apply = () => {
+      const n0 = Math.min(1, Math.max(0, nn));
+      const eff = n0 < 0.01 ? 0 : 1 - (1 - n0) * (1 - tremStrength);          // strength pushes any depth up to the max
+      const dep = eff * (0.95 + 0.05 * tremStrength), T = ctx.currentTime, k = lastTc;
       gL.gain.setTargetAtTime(1 - dep / 2, T, k); gR.gain.setTargetAtTime(1 - dep / 2, T, k);
-      dL.gain.setTargetAtTime(dep / 2, T, k); dR.gain.setTargetAtTime(-dep / 2, T, k);   // opposite phase
-    } };
+      dL.gain.setTargetAtTime(dep / 2, T, k); dR.gain.setTargetAtTime(-dep / 2 * 0.45, T, k);   // mostly opposite phase: wide, but 30% still survives in mono
+    };
+    const tr = { inp, out: mg, refresh: apply, setDepth: (n, tc) => { nn = n; lastTc = tc || 0.03; apply(); } };
+    allTrems.push(tr);
+    return tr;
   }
   const gTrem = makeTrem();
   eq[eq.length - 1].connect(gTrem.inp); gTrem.out.connect(fxIn);
@@ -1077,13 +1093,16 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
   const curVals = key => (perSound(key) ? focusCh.fxs[key] : MODES[key].val);
 
   // Tremolo has two jobs on one knob: drag = Depth. Hold the knob still for half a second to switch it to Rate (and back).
-  let tremEdit = 'depth';
+  let tremEdit = 'depth';   // 'depth' -> 'rate' -> 'power' -> back to 'depth' (hold the knob still)
   let tremRateN = store.get('tremRate', 0.45);
+  let tremPowN = store.get('tremPow', 0);
+  setTremStrength(tremPowN);
+  const tremLabel = { depth: 'Tremolo', rate: 'Trem Rate', power: 'Trem Power' };
   const tremHz = n => 0.3 * Math.pow(8 / 0.3, n);          // 0.3 Hz to 8 Hz
   tremLFO.frequency.value = tremHz(tremRateN);
-  const nameOf = i => ((mode === 'fx' && i === 3 && tremEdit === 'rate') ? 'Trem Rate' : MODES[mode].names[i]);
+  const nameOf = i => ((mode === 'fx' && i === 3 && tremEdit !== 'depth') ? tremLabel[tremEdit] : MODES[mode].names[i]);
   function tremRefresh() {
-    if (mode === 'fx' && tremEdit === 'rate') { auxKnobs[3].set(tremRateN); auxNames[3].textContent = 'Trem Rate'; }
+    if (mode === 'fx' && tremEdit !== 'depth') { auxKnobs[3].set(tremEdit === 'rate' ? tremRateN : tremPowN); auxNames[3].textContent = tremLabel[tremEdit]; }
   }
 
   let mode = 'aux';
@@ -1102,15 +1121,22 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
     auxKnobs.push(makeKnob(kn, { label: 'Knob ' + (i + 1),
       longPress: () => {
         if (!(mode === 'fx' && i === 3)) return false;
-        tremEdit = tremEdit === 'rate' ? 'depth' : 'rate';
-        auxKnobs[3].set(tremEdit === 'rate' ? tremRateN : curVals('fx')[3]);
-        auxNames[3].textContent = tremEdit === 'rate' ? 'Trem Rate' : 'Tremolo';
+        tremEdit = tremEdit === 'depth' ? 'rate' : tremEdit === 'rate' ? 'power' : 'depth';
+        auxKnobs[3].set(tremEdit === 'rate' ? tremRateN : tremEdit === 'power' ? tremPowN : curVals('fx')[3]);
+        auxNames[3].textContent = tremLabel[tremEdit];
         clearTimeout(flashT[3]);
         try { navigator.vibrate && navigator.vibrate(20); } catch (e) {}
         return true;
       },
-      def: () => { if (mode === 'fx' && i === 3 && tremEdit === 'rate') return 0.45; return MODES[mode] ? MODES[mode].def[i] : null; },
+      def: () => { if (mode === 'fx' && i === 3 && tremEdit === 'rate') return 0.45; if (mode === 'fx' && i === 3 && tremEdit === 'power') return 0; return MODES[mode] ? MODES[mode].def[i] : null; },
       onInput: n => {
+      if (mode === 'fx' && i === 3 && tremEdit === 'power') {
+        tremPowN = n; store.set('tremPow', n); setTremStrength(n);
+        name.textContent = 'Power ' + Math.round(n * 100) + '%';
+        clearTimeout(flashT[i]);
+        flashT[i] = setTimeout(() => { if (mode === 'fx') name.textContent = nameOf(3); }, 900);
+        return;
+      }
       if (mode === 'fx' && i === 3 && tremEdit === 'rate') {
         tremRateN = n; store.set('tremRate', n);
         tremLFO.frequency.setTargetAtTime(tremHz(n), ctx.currentTime, 0.05);
@@ -1871,14 +1897,14 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
     loop();
   })();
 
-  window.purpleSoundBank = { ctx, channels, active, noteOn, noteOff, eq, fx, comp, chWet, revWet, master, compIn, lim, hp, hs };
+  window.purpleSoundBank = { ctx, channels, active, noteOn, noteOff, eq, fx, comp, chWet, revWet, master, compIn, lim, hp, hs, setTremStrength, tremShape, tremLFO, allTrems };
 })();
 </script>
 <script>
 /* Auto-update: the website checks for a newer version every 15 s and reloads itself
    when nothing is being played. Settings are saved, so nothing is lost. */
 (() => {
-  const BUILD = '1794348686';
+  const BUILD = '1794349041';
   if (!/^https?:$/.test(location.protocol)) return;
   async function check() {
     try {
