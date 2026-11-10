@@ -1035,7 +1035,13 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
       o.onInput(v);
     }
     let drag = false;
-    el.addEventListener('pointerdown', e => { drag = true; el.setPointerCapture(e.pointerId); if (o.onGrab) o.onGrab(); fromPointer(e); e.preventDefault(); });
+    let lastDown = 0;
+    el.addEventListener('pointerdown', e => {
+      const now = performance.now();
+      if (o.def !== undefined && now - lastDown < 350) { lastDown = 0; drag = false; set(o.def); o.onInput(v); if (o.onGrab) o.onGrab(); e.preventDefault(); return; }
+      lastDown = now;
+      drag = true; el.setPointerCapture(e.pointerId); if (o.onGrab) o.onGrab(); fromPointer(e); e.preventDefault();
+    });
     el.addEventListener('pointermove', e => { if (drag) fromPointer(e); });
     const end = () => { drag = false; };
     el.addEventListener('pointerup', end);
@@ -1083,7 +1089,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
       });
     } else { bs.disabled = bm.disabled = true; }
     if (c) {
-      const f = makeFader(fe, { label: c.name + ' volume', min: 0, max: 1.5, value: c.vol,
+      const f = makeFader(fe, { label: c.name + ' volume', min: 0, max: 1.5, value: c.vol, def: 1,
         onGrab: () => { focusCh = c; refreshUI(); },
         onInput: n => { c.vol = n; store.set('vol.' + c.id, n); applyMix(); } });
       faders.set(c.id, { f, col, bs, bm });
@@ -1104,7 +1110,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
   ghost.innerHTML = '<button type="button" tabindex="-1">S</button>';
   mcol.append(mfe, mlbl, ghost);
   bankEl.appendChild(mcol);
-  const masterFader = makeFader(mfe, { label: 'Master volume', min: 0, max: 1, value: master.gain.value,
+  const masterFader = makeFader(mfe, { label: 'Master volume', min: 0, max: 1, value: master.gain.value, def: master.gain.value,
     onInput: n => { master.gain.value = n; store.set('master', n); } });
 
   function refreshFaders() {
@@ -1645,7 +1651,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
 /* Auto-update: the website checks for a newer version every 15 s and reloads itself
    when nothing is being played. Settings are saved, so nothing is lost. */
 (() => {
-  const BUILD = '1794338367';
+  const BUILD = '1794338489';
   if (!/^https?:$/.test(location.protocol)) return;
   async function check() {
     try {
