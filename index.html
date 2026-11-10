@@ -116,14 +116,20 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
 
 .mid { display: grid; grid-template-columns: auto 1fr auto; grid-template-areas: "ctl aux adsr"; align-items: start; column-gap: 10px; row-gap: 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 10px; }
 .ctl { grid-area: ctl; }
-.aux { grid-area: aux; display: grid; grid-template-columns: repeat(5, minmax(0, 56px)); justify-content: space-evenly; align-items: start; gap: 4px; min-width: 0; }
+.aux { flex: 1; align-content: center; display: grid; grid-template-columns: repeat(5, minmax(0, 56px)); justify-content: space-evenly; align-items: start; gap: 4px; min-width: 0; }
 .mid .adsr { grid-area: adsr; }
+.led { grid-area: aux; align-self: stretch; min-width: 0; position: relative; display: flex; flex-direction: column; gap: 6px; padding: 8px 12px 10px; border-radius: 12px; overflow: hidden; background: radial-gradient(120% 140% at 50% 0%, #150b2b 0%, #07040f 62%, #040208 100%); border: 1px solid #3a2a63; box-shadow: inset 0 0 34px rgba(var(--glow-rgb), .2), 0 0 16px rgba(var(--glow-rgb), .18); }
+.led::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: repeating-linear-gradient(0deg, rgba(0, 0, 0, .28) 0 1px, transparent 1px 3px); mix-blend-mode: multiply; }
+.led-head { display: flex; justify-content: space-between; align-items: center; font-family: var(--font-display); font-size: 10px; font-weight: 600; letter-spacing: .2em; text-transform: uppercase; color: #b98cff; text-shadow: 0 0 8px rgba(var(--glow-rgb), .9); white-space: nowrap; }
+.led-head .sub { color: #6c53a3; text-shadow: none; }
+.led-idle { display: none; flex: 1; flex-direction: column; align-items: center; justify-content: center; gap: 6px; text-align: center; min-height: 64px; }
+.led-idle .big { font-family: var(--font-display); font-weight: 600; font-size: clamp(18px, 3vw, 30px); letter-spacing: .14em; text-transform: uppercase; color: #c9a6ff; text-shadow: 0 0 14px rgba(var(--glow-rgb), 1), 0 0 34px rgba(var(--glow-rgb), .6); }
+.led-idle .small { font-size: 10px; letter-spacing: .22em; text-transform: uppercase; color: #5b4690; }
+.mid.noaux .led-idle { display: flex; }
 .mid.noaux .aux { display: none; }
 @media (max-width: 599px) {
   .mid { grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "ctl adsr" "aux aux"; }
-  .mid.noaux { grid-template-areas: "ctl adsr"; row-gap: 0; }
   .mid .adsr { justify-self: end; width: 100%; max-width: 188px; }
-  .aux { border-top: 1px solid var(--line); padding-top: 10px; }
 }
 .ctl { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; width: 138px; }
 .ctl .fbtn { min-width: 0; height: 36px; padding: 0; font-size: 11px; }
@@ -197,7 +203,11 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
     <div class="stepper"><button id="oct-down" type="button" aria-label="Octave down">&minus;</button><span id="range">C2 &ndash; C3</span><button id="oct-up" type="button" aria-label="Octave up">+</button></div>
     <div class="pair"><button class="fbtn" id="mode-eq" type="button" aria-pressed="false">EQ</button><button class="fbtn" id="mode-fx" type="button" aria-pressed="false">FX</button></div>
   </div>
-  <div class="aux" id="aux-knobs" role="group" aria-label="Extra knobs"></div>
+  <div class="led" id="led">
+    <div class="led-head"><span id="led-title">Sound</span><span class="sub">Purple SoundBank</span></div>
+    <div class="led-idle"><div class="big" id="led-name">&nbsp;</div><div class="small">Tap EQ or FX</div></div>
+    <div class="aux" id="aux-knobs" role="group" aria-label="Extra knobs"></div>
+  </div>
   <div class="adsr">
     <div class="adsr-top">
       <div class="seg" role="group" aria-label="Envelope edit target">
@@ -571,6 +581,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
       el.setAttribute('aria-pressed', String(!c.mute));
       el.querySelector('.pstat').textContent = !c.ready ? 'Loading' : (c.solo ? 'Solo' : '');
     }
+    ledText();
     $('single').classList.toggle('on', single);
     $('single').setAttribute('aria-pressed', String(single));
     $('solo').disabled = single;
@@ -750,9 +761,17 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
       flashT[i] = setTimeout(() => { if (mode === shown) name.textContent = MODES[mode].names[i]; }, 900);
     } }));
   }
+  const LEDT = { aux: 'Sound', eq: '5-Band EQ', fx: 'Filter / FX' };
+  function ledText() {
+    const t = $('led-title'), n = $('led-name');
+    if (!t || !n) return;
+    t.textContent = LEDT[typeof mode === 'string' ? mode : 'aux'] || 'Sound';
+    n.textContent = focusCh ? focusCh.name : 'No sound';
+  }
   function setMode(next) {
     mode = next;
     document.querySelector('.mid').classList.toggle('noaux', mode === 'aux');
+    ledText();
     const m = MODES[mode];
     for (let i = 0; i < 5; i++) {
       clearTimeout(flashT[i]);
@@ -1123,7 +1142,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
 /* Auto-update: the website checks for a newer version every 15 s and reloads itself
    when nothing is being played. Settings are saved, so nothing is lost. */
 (() => {
-  const BUILD = '1794327898';
+  const BUILD = '1794327968';
   if (!/^https?:$/.test(location.protocol)) return;
   async function check() {
     try {
