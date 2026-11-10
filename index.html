@@ -672,7 +672,12 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
   }
 
   function polyUpdate(ch) {
-    if (ch.polyG) ch.polyG.gain.setTargetAtTime(Math.pow(Math.max(1, ch.alive / 2), -0.55), ctx.currentTime, 0.04);
+    if (!ch.polyG) return;
+    const nn = Math.max(1, ch.alive / 2), g = nn <= 8 ? Math.pow(nn, -0.55) : Math.pow(8, -0.55) * Math.pow(nn / 8, -0.9), T = ctx.currentTime, cur = ch.polyG.gain.value;
+    // Drop at once when voices are added (so a big chord's attack never spikes), come back up slowly as they die away.
+    ch.polyG.gain.cancelScheduledValues(T);
+    ch.polyG.gain.setValueAtTime(cur, T);
+    ch.polyG.gain.setTargetAtTime(g, T, g < cur ? 0.002 : 0.4);
   }
 
   function updateFilters() {
@@ -1698,7 +1703,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
 /* Auto-update: the website checks for a newer version every 15 s and reloads itself
    when nothing is being played. Settings are saved, so nothing is lost. */
 (() => {
-  const BUILD = '1794340994';
+  const BUILD = '1794341056';
   if (!/^https?:$/.test(location.protocol)) return;
   async function check() {
     try {
