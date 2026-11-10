@@ -295,7 +295,9 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
   // Cutoff knob, right of centre: a high-pass on the whole mix. At 12 o'clock it sits at 1 Hz (inaudible).
   const hp = ctx.createBiquadFilter();
   hp.type = 'highpass'; hp.frequency.value = 1; hp.Q.value = 0.7;
-  master.connect(hp); hp.connect(eq[0]);
+  const hs = ctx.createBiquadFilter();
+  hs.type = 'highshelf'; hs.frequency.value = 5000; hs.gain.value = 0;
+  master.connect(hp); hp.connect(hs); hs.connect(eq[0]);
   for (let i = 0; i < eq.length - 1; i++) eq[i].connect(eq[i + 1]);
   const fxIn = ctx.createGain();
   eq[eq.length - 1].connect(fxIn);
@@ -793,7 +795,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
   const pct = n => Math.round(n * 100) + '%';
   const cutoffHz = n => 80 * Math.pow(20000 / 80, n);
   const fmtHz = hz => hz >= 1000 ? (hz / 1000).toFixed(1) + ' kHz' : Math.round(hz) + ' Hz';
-  const hpHz = n => 20 * Math.pow(400, (n - 0.5) * 2);   // 12 o'clock = off, fully right = 8 kHz
+  const hpHz = n => 20 * Math.pow(15, (n - 0.5) * 2);   // 12 o'clock = off, fully right = 300 Hz
   const fmtDb = n => { const d = (n - 0.5) * 48; return (d > 0 ? '+' : '') + d.toFixed(1) + ' dB'; };
   const MODES = {
     aux: {
@@ -813,11 +815,18 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
       names: ['Cutoff', 'Reso', 'Fltr Env', 'Chorus', 'Verb'],
       def: [0.5, 0, 0, 0, 0],
       snapFn: i => i === 0 ? 0.5 : undefined,
-      fmt: (i, n) => i === 0 ? (n < 0.495 ? 'LP ' + fmtHz(cutoffHz(n * 2)) : n > 0.505 ? 'HP ' + fmtHz(hpHz(n)) : 'Open') : pct(n),
+      fmt: (i, n) => i === 0 ? (n < 0.495 ? 'LP ' + fmtHz(cutoffHz(n * 2)) : n > 0.505 ? 'Highs +' + Math.round((n - 0.5) * 36) + ' dB' : 'Open') : pct(n),
       apply: (i, n) => {
         if (i === 0) {
-          if (n <= 0.5) { fx.cutoff = cutoffHz(n * 2); hp.frequency.setTargetAtTime(1, ctx.currentTime, 0.03); }
-          else { fx.cutoff = 20000; hp.frequency.setTargetAtTime(hpHz(n), ctx.currentTime, 0.03); }
+          const T = ctx.currentTime, r = Math.max(0, (n - 0.5) * 2);
+          if (n <= 0.5) { fx.cutoff = cutoffHz(n * 2); hp.frequency.setTargetAtTime(1, T, 0.03); hs.gain.setTargetAtTime(0, T, 0.03); }
+          else {
+            // Right of centre = more highs: a growing treble boost with the lows thinning out.
+            fx.cutoff = 20000;
+            hp.frequency.setTargetAtTime(hpHz(n), T, 0.03);
+            hs.frequency.setTargetAtTime(5000 - 3000 * r, T, 0.03);
+            hs.gain.setTargetAtTime(r * 18, T, 0.03);
+          }
           updateFilters();
         }
         else if (i === 1) { fx.reso = n; updateFilters(); }
@@ -1519,7 +1528,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
 /* Auto-update: the website checks for a newer version every 15 s and reloads itself
    when nothing is being played. Settings are saved, so nothing is lost. */
 (() => {
-  const BUILD = '1794334148';
+  const BUILD = '1794334224';
   if (!/^https?:$/.test(location.protocol)) return;
   async function check() {
     try {
