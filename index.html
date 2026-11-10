@@ -410,7 +410,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
       tail.connect(bq); tail = bq;
     }
     // Mod wheel routing per sound: 'vibrato' (default), 'cutoff' (wheel opens a low-pass) or 'none'.
-    let modLP = null, modHS = null, modAir = null, modSweep = null, modLS = null;
+    let modLP = null, modHS = null, modAir = null, modSweep = null, modLS = null, modTrim = null;
     if (s.mod === 'cutoff') {
       modLP = ctx.createBiquadFilter();
       modLP.type = 'lowpass'; modLP.frequency.value = 20000; modLP.Q.value = 0.5;   // stays open: wheel down = the pad's own sound
@@ -420,7 +420,8 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
       modAir = ctx.createBiquadFilter(); modAir.type = 'peaking'; modAir.frequency.value = 7500; modAir.Q.value = 0.7; modAir.gain.value = 0;
       modSweep = ctx.createBiquadFilter(); modSweep.type = 'peaking'; modSweep.frequency.value = 300; modSweep.Q.value = 2.5; modSweep.gain.value = 0;
       modLS = ctx.createBiquadFilter(); modLS.type = 'lowshelf'; modLS.frequency.value = 220; modLS.gain.value = 0;
-      tail.connect(modLS); modLS.connect(modSweep); modSweep.connect(modHS); modHS.connect(modAir); tail = modAir;
+      modTrim = ctx.createGain();   // pulls the level back as the wheel opens the pad up, so wide open never distorts
+      tail.connect(modLS); modLS.connect(modSweep); modSweep.connect(modHS); modHS.connect(modAir); modAir.connect(modTrim); tail = modTrim;
     }
     // Per-sound EQ + filter (flat until you edit this sound in Single mode).
     const chHP = ctx.createBiquadFilter(); chHP.type = 'highpass'; chHP.frequency.value = 1; chHP.Q.value = 0.7;
@@ -486,7 +487,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
     // Poly sounds (pads): gain follows the number of sounding voices, so 32 notes plus their ringing tails stay clean.
     let polyG = null;
     if (s.poly) { polyG = ctx.createGain(); polyG.connect(inp); inp = polyG; }
-    return { dbgTail, chEQ, chHP, chHS, chSend, revSend, fxo: { cutoff: 20000, reso: 0, env: 0 }, polyG, alive: 0, held: 0, vox: [], inp, modLP, modHS, modAir, modSweep, modLS, mod: s.mod || 'vibrato', analog: !!s.analog, id: s.id, name: s.name, cat: s.cat || '', samples: s.samples, buffers: new Map(), keys: [], ready: false,
+    return { modTrim, dbgTail, chEQ, chHP, chHS, chSend, revSend, fxo: { cutoff: 20000, reso: 0, env: 0 }, polyG, alive: 0, held: 0, vox: [], inp, modLP, modHS, modAir, modSweep, modLS, mod: s.mod || 'vibrato', analog: !!s.analog, id: s.id, name: s.name, cat: s.cat || '', samples: s.samples, buffers: new Map(), keys: [], ready: false,
              vol: store.get('vol.' + s.id, 1), mute: false, solo: false, out,
              trim: s.trim || 1, human: !!s.human, velDeep: !!s.velDeep, drift: !!s.drift, fat: !!s.fat, loop: s.loop || null, fatPan: s.fatPan || 0, fatSpread: s.fatSpread || 0, fatOffset: !!s.fatOffset, tame: !!s.tame, rel: s.rel || 0.09, loops: new Map(),
              env0: { a: 0, d: 0.5, s: 1, r: +((s.rel || 0.09) * 4).toFixed(2) } };
@@ -637,7 +638,8 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
       if (e.s < 0.999) g.gain.setTargetAtTime(ampc * e.s, t + at, Math.max(0.01, e.d) / 3);
       const f = ctx.createBiquadFilter();
       f.type = 'lowpass';
-      const fc = Math.min(fx.cutoff, ch.fxo.cutoff), fr = Math.max(fx.reso, ch.fxo.reso), fe = Math.max(fx.env, ch.fxo.env);
+      const wm = ch.mod === 'cutoff' ? modVal : 0;   // the mod wheel opens the pad's own Cutoff and Filter Env together
+      const fc = Math.min(20000, Math.min(fx.cutoff, ch.fxo.cutoff) * Math.pow(2, wm * 6)), fr = Math.min(1, Math.max(fx.reso, ch.fxo.reso) + wm * 0.15), fe = Math.max(fx.env, ch.fxo.env, wm);
       f.Q.value = fr * 20;
       const peak = Math.min(20000, fc * Math.pow(2, fe * 5));
       if (fe > 0.01 && peak > fc * 1.01) {
@@ -705,8 +707,9 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
     const live = [...active.values(), ...sustained];
     for (const v of live) for (const p of v.parts) {
       p.f.frequency.cancelScheduledValues(t);
-      p.f.frequency.setTargetAtTime(Math.min(fx.cutoff, p.ch.fxo.cutoff), t, 0.03);
-      p.f.Q.setTargetAtTime(Math.max(fx.reso, p.ch.fxo.reso) * 20, t, 0.03);
+      const wm = p.ch.mod === 'cutoff' ? modVal : 0;
+      p.f.frequency.setTargetAtTime(Math.min(20000, Math.min(fx.cutoff, p.ch.fxo.cutoff) * Math.pow(2, wm * 6)), t, 0.03);
+      p.f.Q.setTargetAtTime(Math.min(1, Math.max(fx.reso, p.ch.fxo.reso) + wm * 0.15) * 20, t, 0.03);
     }
   }
 
@@ -1563,11 +1566,13 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
       // Wheel at the bottom: the pad exactly as it is. Wheel up: a bright resonant sweep rises through the highs,
       // the top end blooms and the low end steps back so it feels wide open.
       c.modSweep.frequency.setTargetAtTime(300 * Math.pow(40, m), T, 0.025);
-      c.modSweep.gain.setTargetAtTime(Math.min(1, m * 4) * 15, T, 0.025);
-      c.modHS.gain.setTargetAtTime(m * 24, T, 0.03);
-      c.modAir.gain.setTargetAtTime(m * 10, T, 0.03);
+      c.modSweep.gain.setTargetAtTime(Math.min(1, m * 4) * 22, T, 0.025);
+      c.modHS.gain.setTargetAtTime(m * 30, T, 0.03);
+      c.modAir.gain.setTargetAtTime(m * 16, T, 0.03);
       c.modLS.gain.setTargetAtTime(-m * 8, T, 0.03);
+      c.modTrim.gain.setTargetAtTime(Math.pow(10, -m * 23 / 20), T, 0.03);
     }
+    if (channels.some(c => c.mod === 'cutoff')) updateFilters();   // the pad's own Cutoff and Filter Env open with the wheel
   }
   const wheelT = (e, el) => { const r = el.getBoundingClientRect(); return Math.min(1, Math.max(0, 1 - (e.clientY - r.top - 17) / (r.height - 52))); };
   let springId = 0;
@@ -1784,7 +1789,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
 /* Auto-update: the website checks for a newer version every 15 s and reloads itself
    when nothing is being played. Settings are saved, so nothing is lost. */
 (() => {
-  const BUILD = '1794343685';
+  const BUILD = '1794344168';
   if (!/^https?:$/.test(location.protocol)) return;
   async function check() {
     try {
