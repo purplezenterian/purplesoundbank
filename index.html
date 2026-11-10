@@ -293,7 +293,13 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
   const comp = ctx.createDynamicsCompressor();
   comp.threshold.value = -10; comp.knee.value = 12; comp.ratio.value = 4;
   comp.attack.value = 0.003; comp.release.value = 0.2;
-  comp.connect(ctx.destination);
+  // Safety limiter: invisible below -3 dB, catches peaks so nothing ever distorts. Makeup gain is cancelled so quiet playing is untouched.
+  const lim = ctx.createDynamicsCompressor();
+  lim.threshold.value = -3; lim.knee.value = 0; lim.ratio.value = 20; lim.attack.value = 0.001; lim.release.value = 0.12;
+  const limFix = ctx.createGain(); limFix.gain.value = 1 / Math.pow(1 / Math.pow(10, (-3 + 3 / 20) / 20), 0.6);
+  const guard = ctx.createWaveShaper();
+  { const n = 2048, cv = new Float32Array(n); for (let i = 0; i < n; i++) { const x = i / (n - 1) * 2 - 1, a = Math.abs(x), k = 0.9; cv[i] = Math.sign(x) * (a <= k ? a : k + (1 - k) * Math.tanh((a - k) / (1 - k))); } guard.curve = cv; guard.oversample = '4x'; }
+  comp.connect(lim); lim.connect(limFix); limFix.connect(guard); guard.connect(ctx.destination);
   const outTap = comp;
 
   // Effects bus: master -> 5-band EQ -> chorus -> reverb -> compressor.
@@ -1651,7 +1657,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
 /* Auto-update: the website checks for a newer version every 15 s and reloads itself
    when nothing is being played. Settings are saved, so nothing is lost. */
 (() => {
-  const BUILD = '1794338489';
+  const BUILD = '1794338647';
   if (!/^https?:$/.test(location.protocol)) return;
   async function check() {
     try {
