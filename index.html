@@ -365,7 +365,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
     let modLP = null;
     if (s.mod === 'cutoff') {
       modLP = ctx.createBiquadFilter();
-      modLP.type = 'lowpass'; modLP.frequency.value = 500; modLP.Q.value = 0.9;
+      modLP.type = 'lowpass'; modLP.frequency.value = 60; modLP.Q.value = 4;
       tail.connect(modLP); tail = modLP;
     }
     tail.connect(master);
@@ -1302,7 +1302,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
     $('w-mod-f').style.height = (modVal * 100) + '%';
     wm.classList.toggle('live', modVal > 0.01);
     modGain.gain.setTargetAtTime(modVal * 45, ctx.currentTime, 0.02);   // up to 45 cents of vibrato
-    for (const c of channels) if (c.modLP) c.modLP.frequency.setTargetAtTime(500 * Math.pow(40, modVal), ctx.currentTime, 0.03);   // 500 Hz closed -> 20 kHz open
+    for (const c of channels) if (c.modLP) c.modLP.frequency.setTargetAtTime(60 * Math.pow(333.3, modVal), ctx.currentTime, 0.025);   // 60 Hz shut -> 20 kHz wide open, with resonance
   }
   const wheelT = (e, el) => { const r = el.getBoundingClientRect(); return Math.min(1, Math.max(0, 1 - (e.clientY - r.top - 17) / (r.height - 52))); };
   let springId = 0;
@@ -1519,7 +1519,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
 /* Auto-update: the website checks for a newer version every 15 s and reloads itself
    when nothing is being played. Settings are saved, so nothing is lost. */
 (() => {
-  const BUILD = '1794334093';
+  const BUILD = '1794334148';
   if (!/^https?:$/.test(location.protocol)) return;
   async function check() {
     try {
