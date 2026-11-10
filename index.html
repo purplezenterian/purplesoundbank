@@ -157,6 +157,17 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
 .chan.master { border-left: 1px solid var(--line); padding-left: 4px; }
 .chan .lbl { height: 24px; font-size: 9.5px; line-height: 1.2; color: var(--muted); text-align: center; overflow: hidden; display: flex; align-items: flex-start; justify-content: center; max-width: 100%; word-break: break-word; }
 .chan.focus .lbl { color: var(--text); }
+.sm { display: flex; gap: 4px; justify-content: center; }
+.sm button { width: 34px; height: 28px; padding: 0; border-radius: 8px; border: 1px solid var(--line); background: #0d0818; color: var(--muted); font: 600 12px var(--font-display); letter-spacing: .02em; cursor: pointer; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+.sm button:disabled { opacity: .3; cursor: default; }
+.sm .bs.on { background: linear-gradient(180deg, #8a4dff, var(--glow-deep)); border-color: var(--glow); color: #fff; box-shadow: 0 0 10px rgba(var(--glow-rgb), .7); }
+.sm .bm.on { background: #3a2208; border-color: #ffb347; color: #ffb347; box-shadow: 0 0 10px rgba(255, 179, 71, .55); }
+.sm.ghost { visibility: hidden; }
+@media (max-width: 599px) { .sm { flex-direction: column; gap: 5px; } .sm button { width: 32px; height: 30px; } 
+  html, body { height: auto; min-height: 100%; }
+  .bank { flex: none; min-height: 215px; }
+  .led-idle { min-height: 64px; }
+}
 .chan.empty .lbl { color: var(--faint); }
 .fader { position: relative; flex: 1; width: 100%; min-height: 80px; touch-action: none; cursor: pointer; }
 .ftrack { position: absolute; left: 50%; top: 9px; bottom: 9px; width: 6px; transform: translateX(-50%); border-radius: 3px; background: #000; border: 1px solid #2a2142; box-sizing: border-box; }
@@ -841,13 +852,34 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
     const lbl = document.createElement('div');
     lbl.className = 'lbl';
     lbl.textContent = c ? c.name : '';
-    col.append(fe, lbl);
+    const sm = document.createElement('div');
+    sm.className = 'sm';
+    const bs = document.createElement('button'), bm = document.createElement('button');
+    bs.type = bm.type = 'button';
+    bs.className = 'bs'; bm.className = 'bm';
+    bs.textContent = 'S'; bm.textContent = 'M';
+    bs.setAttribute('aria-label', (c ? c.name : 'Empty') + ' solo');
+    bm.setAttribute('aria-label', (c ? c.name : 'Empty') + ' mute');
+    sm.append(bs, bm);
+    col.append(fe, lbl, sm);
     bankEl.appendChild(col);
+    if (c) {
+      bs.addEventListener('click', () => {
+        if (single) return;
+        c.solo = !c.solo; if (c.solo) c.mute = false;
+        saveOn(); applyMix();
+      });
+      bm.addEventListener('click', () => {
+        if (single) return;
+        c.mute = !c.mute; if (c.mute) c.solo = false;
+        saveOn(); applyMix();
+      });
+    } else { bs.disabled = bm.disabled = true; }
     if (c) {
       const f = makeFader(fe, { label: c.name + ' volume', min: 0, max: 1.5, value: c.vol,
         onGrab: () => { focusCh = c; refreshUI(); },
         onInput: n => { c.vol = n; store.set('vol.' + c.id, n); applyMix(); } });
-      faders.set(c.id, { f, col });
+      faders.set(c.id, { f, col, bs, bm });
     } else {
       fe.setAttribute('aria-hidden', 'true');
       makeFader(fe, { label: 'Empty', min: 0, max: 1, value: 0, onInput() {} });
@@ -860,7 +892,10 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
   const mlbl = document.createElement('div');
   mlbl.className = 'lbl';
   mlbl.textContent = 'Master';
-  mcol.append(mfe, mlbl);
+  const ghost = document.createElement('div');
+  ghost.className = 'sm ghost';
+  ghost.innerHTML = '<button type="button" tabindex="-1">S</button>';
+  mcol.append(mfe, mlbl, ghost);
   bankEl.appendChild(mcol);
   const masterFader = makeFader(mfe, { label: 'Master volume', min: 0, max: 1, value: master.gain.value,
     onInput: n => { master.gain.value = n; store.set('master', n); } });
@@ -872,6 +907,11 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
       x.col.classList.toggle('focus', c === focusCh);
       x.col.classList.toggle('off', c.mute);
       x.f.set(c.vol);
+      x.bs.classList.toggle('on', !!c.solo);
+      x.bm.classList.toggle('on', !!c.mute);
+      x.bs.setAttribute('aria-pressed', String(!!c.solo));
+      x.bm.setAttribute('aria-pressed', String(!!c.mute));
+      x.bs.disabled = x.bm.disabled = single;
     }
   }
 
@@ -1314,7 +1354,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
 /* Auto-update: the website checks for a newer version every 15 s and reloads itself
    when nothing is being played. Settings are saved, so nothing is lost. */
 (() => {
-  const BUILD = '1794328524';
+  const BUILD = '1794328785';
   if (!/^https?:$/.test(location.protocol)) return;
   async function check() {
     try {
