@@ -865,7 +865,13 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
       el.setAttribute('aria-valuenow', v.toFixed(2));
     }
     let y0 = 0, v0 = 0, drag = false;
-    el.addEventListener('pointerdown', e => { drag = true; y0 = e.clientY; v0 = v; el.setPointerCapture(e.pointerId); e.preventDefault(); });
+    let lastDown = 0;
+    el.addEventListener('pointerdown', e => {
+      const now = performance.now();
+      if (o.def && now - lastDown < 350) { lastDown = 0; drag = false; const d = o.def(); if (d !== null && d !== undefined) { set(d); o.onInput(v); } e.preventDefault(); return; }   // double tap: back to default
+      lastDown = now;
+      drag = true; y0 = e.clientY; v0 = v; el.setPointerCapture(e.pointerId); e.preventDefault();
+    });
     el.addEventListener('pointermove', e => { if (!drag) return; set(v0 + (y0 - e.clientY) / 140); o.onInput(v); });
     const end = () => { drag = false; };
     el.addEventListener('pointerup', end);
@@ -890,10 +896,14 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
     col.append(kn, name);
     let flash = 0;
     envHost.appendChild(col);
-    const k = makeKnob(kn, { label: p.name, onInput: n => {
+    const k = makeKnob(kn, { label: p.name, def: () => {
+      if (!focusCh) return null;
+      for (const c of (editAll ? channels : [focusCh])) { c.env[p.k] = c.env0[p.k]; saveEnv(c); }
+      return toNorm(p, focusCh.env0[p.k]);
+    }, onInput: n => {
       if (!focusCh) return;
       const v = +toVal(p, n).toFixed(3);
-      for (const c of (editAll ? channels : [focusCh])) { c.env[p.k] = v; saveEnv(c); }
+      if (!(Math.abs(toNorm(p, focusCh.env0[p.k]) - n) < 1e-6)) for (const c of (editAll ? channels : [focusCh])) { c.env[p.k] = v; saveEnv(c); }
       name.textContent = fmt(p, v);
       clearTimeout(flash);
       flash = setTimeout(() => { name.textContent = p.name; }, 900);
@@ -992,7 +1002,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
     col.append(kn, name);
     auxHost.appendChild(col);
     auxNames.push(name);
-    auxKnobs.push(makeKnob(kn, { label: 'Knob ' + (i + 1), onInput: n => {
+    auxKnobs.push(makeKnob(kn, { label: 'Knob ' + (i + 1), def: () => (MODES[mode] ? MODES[mode].def[i] : null), onInput: n => {
       const m = MODES[mode];
       const sn = m.snapFn ? m.snapFn(i) : m.snap;
       if (sn !== undefined && Math.abs(n - sn) < 0.025) { n = sn; auxKnobs[i].set(n); }
@@ -1703,7 +1713,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
 /* Auto-update: the website checks for a newer version every 15 s and reloads itself
    when nothing is being played. Settings are saved, so nothing is lost. */
 (() => {
-  const BUILD = '1794341119';
+  const BUILD = '1794341499';
   if (!/^https?:$/.test(location.protocol)) return;
   async function check() {
     try {
