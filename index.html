@@ -203,6 +203,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
     <button class="fbtn" id="single" type="button" aria-pressed="false" title="Only one sound plays at a time">Single</button>
     <div class="stepper"><button id="oct-down" type="button" aria-label="Octave down">&minus;</button><span id="range">C2 &ndash; C3</span><button id="oct-up" type="button" aria-label="Octave up">+</button></div>
     <div class="pair"><button class="fbtn" id="mode-eq" type="button" aria-pressed="false">EQ</button><button class="fbtn" id="mode-fx" type="button" aria-pressed="false">FX</button></div>
+    <div class="pair"><button class="fbtn" id="undo" type="button" disabled title="Undo (Ctrl/Cmd+Z)">&#8630; Undo</button><button class="fbtn" id="redo" type="button" disabled title="Redo (Ctrl/Cmd+Shift+Z)">Redo &#8631;</button></div>
   </div>
   <div class="led" id="led">
     <div class="led-head"><span id="led-title">Sound</span><span class="sub">Purple SoundBank</span></div>
@@ -860,7 +861,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
   mlbl.textContent = 'Master';
   mcol.append(mfe, mlbl);
   bankEl.appendChild(mcol);
-  makeFader(mfe, { label: 'Master volume', min: 0, max: 1, value: master.gain.value,
+  const masterFader = makeFader(mfe, { label: 'Master volume', min: 0, max: 1, value: master.gain.value,
     onInput: n => { master.gain.value = n; store.set('master', n); } });
 
   function refreshFaders() {
@@ -872,6 +873,69 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
       x.f.set(c.vol);
     }
   }
+
+  /* ---------- undo / redo ---------- */
+  // Every settings change (faders, master, knobs, ADSR, EQ/FX, pads, solo, single) is a step.
+  // A drag counts as one step: it is recorded once the control has been still for a moment.
+  const hist = [];
+  let hIdx = -1, pend = null, pendAt = 0, ptrDown = false;
+  window.addEventListener('pointerdown', () => { ptrDown = true; }, true);
+  const ptrUp = () => { ptrDown = false; };
+  window.addEventListener('pointerup', ptrUp, true);
+  window.addEventListener('pointercancel', ptrUp, true);
+  function snap() {
+    const o = { master: +master.gain.value.toFixed(4), single, vol: {}, env: {}, on: {}, solo: {},
+      eq: MODES.eq.val.slice(), fx: MODES.fx.val.slice(), aux: MODES.aux.val.slice() };
+    for (const c of channels) { o.vol[c.id] = c.vol; o.env[c.id] = Object.assign({}, c.env); o.on[c.id] = !c.mute; o.solo[c.id] = !!c.solo; }
+    return o;
+  }
+  function restore(o) {
+    master.gain.value = o.master; masterFader.set(o.master); store.set('master', o.master);
+    single = o.single; store.set('single', single);
+    for (const c of channels) {
+      if (o.vol[c.id] !== undefined) { c.vol = o.vol[c.id]; store.set('vol.' + c.id, c.vol); }
+      if (o.env[c.id]) { c.env = Object.assign({}, o.env[c.id]); saveEnv(c); }
+      c.mute = !o.on[c.id]; c.solo = !!o.solo[c.id];
+    }
+    for (const k of ['eq', 'fx', 'aux']) {
+      MODES[k].val = o[k].slice(); store.set('knobs.' + k, MODES[k].val);
+      MODES[k].apply && MODES[k].val.forEach((n, i) => MODES[k].apply(i, n));
+    }
+    saveOn();
+    applyMix();
+    setMode(mode);
+  }
+  function histButtons() {
+    $('undo').disabled = hIdx <= 0;
+    $('redo').disabled = hIdx >= hist.length - 1;
+  }
+  function jump(d) {
+    const n = hIdx + d;
+    if (n < 0 || n >= hist.length) return;
+    hIdx = n; pend = null;
+    restore(JSON.parse(hist[hIdx]));
+    histButtons();
+  }
+  setInterval(() => {
+    const j = JSON.stringify(snap());
+    if (hIdx < 0) { hist.push(j); hIdx = 0; histButtons(); return; }
+    if (j === hist[hIdx]) { pend = null; return; }
+    const now = performance.now();
+    if (j !== pend) { pend = j; pendAt = now; return; }
+    if (ptrDown || now - pendAt < 450) return;
+    hist.length = hIdx + 1;
+    hist.push(j); hIdx++;
+    if (hist.length > 150) { hist.shift(); hIdx--; }
+    pend = null;
+    histButtons();
+  }, 150);
+  $('undo').addEventListener('click', () => jump(-1));
+  $('redo').addEventListener('click', () => jump(1));
+  window.addEventListener('keydown', e => {
+    if (!(e.metaKey || e.ctrlKey) || e.altKey || e.key.toLowerCase() !== 'z') return;
+    e.preventDefault();
+    jump(e.shiftKey ? 1 : -1);
+  });
 
   /* ---------- keyboard ---------- */
   const kb = $('kb');
@@ -1249,7 +1313,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
 /* Auto-update: the website checks for a newer version every 15 s and reloads itself
    when nothing is being played. Settings are saved, so nothing is lost. */
 (() => {
-  const BUILD = '1794328176';
+  const BUILD = '1794328441';
   if (!/^https?:$/.test(location.protocol)) return;
   async function check() {
     try {
