@@ -140,6 +140,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
 .ctl .stepper span { min-width: 0; flex: 1; font-size: 12px; white-space: nowrap; }
 .ctl .pair { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
 .ctl .pair .fbtn { font-size: 12.5px; }
+#undo, #redo { text-transform: uppercase; letter-spacing: .06em; font-size: 11px; }
 .mid .adsr { width: 188px; min-width: 0; gap: 6px; }
 .mid .adsr-top { gap: 6px; }
 .mid .seg { flex: 1 1 auto; min-width: 0; }
@@ -1313,7 +1314,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
 /* Auto-update: the website checks for a newer version every 15 s and reloads itself
    when nothing is being played. Settings are saved, so nothing is lost. */
 (() => {
-  const BUILD = '1794328441';
+  const BUILD = '1794328524';
   if (!/^https?:$/.test(location.protocol)) return;
   async function check() {
     try {
