@@ -292,7 +292,10 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
     n.type = b.type; n.frequency.value = b.f; n.Q.value = b.q; n.gain.value = 0;
     return n;
   });
-  master.connect(eq[0]);
+  // Cutoff knob, right of centre: a high-pass on the whole mix. At 12 o'clock it sits at 1 Hz (inaudible).
+  const hp = ctx.createBiquadFilter();
+  hp.type = 'highpass'; hp.frequency.value = 1; hp.Q.value = 0.7;
+  master.connect(hp); hp.connect(eq[0]);
   for (let i = 0; i < eq.length - 1; i++) eq[i].connect(eq[i + 1]);
   const fxIn = ctx.createGain();
   eq[eq.length - 1].connect(fxIn);
@@ -778,6 +781,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
   const pct = n => Math.round(n * 100) + '%';
   const cutoffHz = n => 80 * Math.pow(20000 / 80, n);
   const fmtHz = hz => hz >= 1000 ? (hz / 1000).toFixed(1) + ' kHz' : Math.round(hz) + ' Hz';
+  const hpHz = n => 20 * Math.pow(400, (n - 0.5) * 2);   // 12 o'clock = off, fully right = 8 kHz
   const fmtDb = n => { const d = (n - 0.5) * 48; return (d > 0 ? '+' : '') + d.toFixed(1) + ' dB'; };
   const MODES = {
     aux: {
@@ -795,10 +799,15 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
     },
     fx: {
       names: ['Cutoff', 'Reso', 'Fltr Env', 'Chorus', 'Verb'],
-      def: [1, 0, 0, 0, 0],
-      fmt: (i, n) => i === 0 ? fmtHz(cutoffHz(n)) : pct(n),
+      def: [0.5, 0, 0, 0, 0],
+      snapFn: i => i === 0 ? 0.5 : undefined,
+      fmt: (i, n) => i === 0 ? (n < 0.495 ? 'LP ' + fmtHz(cutoffHz(n * 2)) : n > 0.505 ? 'HP ' + fmtHz(hpHz(n)) : 'Open') : pct(n),
       apply: (i, n) => {
-        if (i === 0) { fx.cutoff = cutoffHz(n); updateFilters(); }
+        if (i === 0) {
+          if (n <= 0.5) { fx.cutoff = cutoffHz(n * 2); hp.frequency.setTargetAtTime(1, ctx.currentTime, 0.03); }
+          else { fx.cutoff = 20000; hp.frequency.setTargetAtTime(hpHz(n), ctx.currentTime, 0.03); }
+          updateFilters();
+        }
         else if (i === 1) { fx.reso = n; updateFilters(); }
         else if (i === 2) fx.env = n;
         else if (i === 3) chWet.gain.setTargetAtTime(n * 0.8, ctx.currentTime, 0.03);
@@ -810,6 +819,11 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
     const m = MODES[key];
     m.val = store.get('knobs.' + key, m.def).slice(0, 5);
     while (m.val.length < 5) m.val.push(m.def[m.val.length]);
+  }
+  // One-time: the old cutoff knob ran open->closed over the whole turn; it now has open at 12 o'clock.
+  if (!store.get('fxv2', false)) {
+    if (store.get('knobs.fx', null)) { MODES.fx.val[0] = Math.min(1, MODES.fx.val[0]) * 0.5; store.set('knobs.fx', MODES.fx.val); }
+    store.set('fxv2', true);
   }
   // Apply saved EQ and FX settings to the sound right away.
   for (const key of ['eq', 'fx']) MODES[key].val.forEach((n, i) => MODES[key].apply(i, n));
@@ -829,7 +843,8 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
     auxNames.push(name);
     auxKnobs.push(makeKnob(kn, { label: 'Knob ' + (i + 1), onInput: n => {
       const m = MODES[mode];
-      if (m.snap !== undefined && Math.abs(n - m.snap) < 0.025) { n = m.snap; auxKnobs[i].set(n); }
+      const sn = m.snapFn ? m.snapFn(i) : m.snap;
+      if (sn !== undefined && Math.abs(n - sn) < 0.025) { n = sn; auxKnobs[i].set(n); }
       m.val[i] = n;
       store.set('knobs.' + mode, m.val);
       m.apply(i, n);
@@ -1491,7 +1506,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
 /* Auto-update: the website checks for a newer version every 15 s and reloads itself
    when nothing is being played. Settings are saved, so nothing is lost. */
 (() => {
-  const BUILD = '1794332484';
+  const BUILD = '1794332666';
   if (!/^https?:$/.test(location.protocol)) return;
   async function check() {
     try {
