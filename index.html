@@ -233,7 +233,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
     <button class="fbtn" id="solo" type="button" aria-pressed="false">Solo</button>
     <button class="fbtn" id="single" type="button" aria-pressed="false" title="Only one sound plays at a time">Single</button>
     <div class="stepper"><button id="oct-down" type="button" aria-label="Octave down">&minus;</button><span id="range">C2 &ndash; C3</span><button id="oct-up" type="button" aria-label="Octave up">+</button></div>
-    <div class="pair"><button class="fbtn" id="mode-eq" type="button" aria-pressed="false">EQ</button><button class="fbtn" id="mode-fx" type="button" aria-pressed="false">FX</button><button class="fbtn" id="mode-lib" type="button" aria-pressed="false">LIB</button></div>
+    <div class="pair"><button class="fbtn" id="mode-lib" type="button" aria-pressed="false">LIB</button><button class="fbtn" id="mode-eq" type="button" aria-pressed="false">EQ</button><button class="fbtn" id="mode-fx" type="button" aria-pressed="false">FX</button></div>
     <div class="pair"><button class="fbtn" id="undo" type="button" disabled title="Undo (Ctrl/Cmd+Z)">&#8630; Undo</button><button class="fbtn" id="redo" type="button" disabled title="Redo (Ctrl/Cmd+Shift+Z)">Redo &#8631;</button></div>
   </div>
   <div class="led" id="led">
@@ -1824,7 +1824,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
 /* Auto-update: the website checks for a newer version every 15 s and reloads itself
    when nothing is being played. Settings are saved, so nothing is lost. */
 (() => {
-  const BUILD = '1794345431';
+  const BUILD = '1794345769';
   if (!/^https?:$/.test(location.protocol)) return;
   async function check() {
     try {
