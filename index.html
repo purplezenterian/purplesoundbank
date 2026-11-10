@@ -157,6 +157,9 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
 .chan.master { border-left: 1px solid var(--line); padding-left: 4px; }
 .chan .lbl { height: 24px; font-size: 9.5px; line-height: 1.2; color: var(--muted); text-align: center; overflow: hidden; display: flex; align-items: flex-start; justify-content: center; max-width: 100%; word-break: break-word; }
 .chan.focus .lbl { color: var(--text); }
+.chan.sel { background: rgba(var(--glow-rgb), .14); box-shadow: 0 0 0 1px var(--glow), 0 0 14px rgba(var(--glow-rgb), .4); border-radius: 10px; }
+#select { -webkit-touch-callout: none; touch-action: manipulation; }
+.bank.armed .chan:not(.master):not(.empty) .fader { cursor: copy; }
 .sm { display: flex; gap: 4px; justify-content: center; }
 .sm button { width: 34px; height: 28px; padding: 0; border-radius: 8px; border: 1px solid var(--line); background: #0d0818; color: var(--muted); font: 600 12px var(--font-display); letter-spacing: .02em; cursor: pointer; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
 .sm button:disabled { opacity: .3; cursor: default; }
@@ -211,7 +214,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
 <section class="mid" aria-label="Envelope and controls">
   <div class="ctl">
     <button class="fbtn" id="solo" type="button" aria-pressed="false">Solo</button>
-    <button class="fbtn" id="sustain" type="button" aria-pressed="false">Sustain</button>
+    <button class="fbtn" id="select" type="button" aria-pressed="false" title="Tap to arm, tap again to disarm. Or hold it and tap faders to move several together.">Select</button>
     <button class="fbtn" id="single" type="button" aria-pressed="false" title="Only one sound plays at a time">Single</button>
     <div class="stepper"><button id="oct-down" type="button" aria-label="Octave down">&minus;</button><span id="range">C2 &ndash; C3</span><button id="oct-up" type="button" aria-label="Octave up">+</button></div>
     <div class="pair"><button class="fbtn" id="mode-eq" type="button" aria-pressed="false">EQ</button><button class="fbtn" id="mode-fx" type="button" aria-pressed="false">FX</button></div>
@@ -503,8 +506,6 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
   }
 
   function syncPedal() {
-    $('sustain').classList.toggle('on', uiPedal);
-    $('sustain').setAttribute('aria-pressed', String(uiPedal));
     if (!pedalOn()) for (const v of [...sustained]) release(v);
   }
 
@@ -915,6 +916,81 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
     }
   }
 
+  /* ---------- select: move several faders together ---------- */
+  // Tap Select to arm it (tap again to disarm), or hold it like a modifier key.
+  // While armed, tap faders to add or remove them, then drag any selected fader to move them all.
+  const selSet = new Set();
+  let armed = false;
+  function paintSel() {
+    $('select').classList.toggle('on', armed);
+    $('select').setAttribute('aria-pressed', String(armed));
+    $('bank').classList.toggle('armed', armed);
+    for (const [id, x] of faders) x.col.classList.toggle('sel', armed && selSet.has(id));
+  }
+  function setArmed(a) {
+    armed = a;
+    if (!armed) selSet.clear();
+    paintSel();
+  }
+  {
+    const btn = $('select');
+    let down = null;
+    btn.addEventListener('contextmenu', e => e.preventDefault());
+    btn.addEventListener('pointerdown', e => {
+      e.preventDefault();
+      down = { id: e.pointerId, t: performance.now(), was: armed };
+      if (!armed) setArmed(true);
+    });
+    const upSel = e => {
+      if (!down || e.pointerId !== down.id) return;
+      const held = performance.now() - down.t >= 400;
+      if (down.was) setArmed(false);          // tap while armed: disarm
+      else if (held) setArmed(false);         // held like a modifier key: let go to disarm
+      down = null;
+    };
+    window.addEventListener('pointerup', upSel);
+    window.addEventListener('pointercancel', upSel);
+  }
+  for (const c of channels) {
+    const x = faders.get(c.id);
+    if (!x) continue;
+    const el = x.col.querySelector('.fader');
+    let drag = null;
+    el.addEventListener('pointerdown', e => {
+      if (!armed) return;
+      e.stopImmediatePropagation(); e.preventDefault();
+      el.setPointerCapture(e.pointerId);
+      const was = selSet.has(c.id);
+      selSet.add(c.id);
+      paintSel();
+      const starts = new Map();
+      for (const id of selSet) { const ch = channels.find(k => k.id === id); starts.set(ch, ch.vol); }
+      drag = { y0: e.clientY, was, moved: false, starts, h: Math.max(40, el.clientHeight - 18) };
+    }, true);
+    el.addEventListener('pointermove', e => {
+      if (!drag) return;
+      const dy = drag.y0 - e.clientY;
+      if (Math.abs(dy) > 4) drag.moved = true;
+      if (!drag.moved) return;
+      const delta = dy / drag.h * 1.5;
+      for (const [ch, v0] of drag.starts) {
+        const v = Math.min(1.5, Math.max(0, v0 + delta));
+        ch.vol = v; store.set('vol.' + ch.id, v);
+        faders.get(ch.id).f.set(v);
+      }
+      applyMix();
+    });
+    const endSel = () => {
+      if (!drag) return;
+      if (!drag.moved && drag.was) selSet.delete(c.id);   // tap on a selected fader: deselect
+      drag = null;
+      paintSel();
+    };
+    el.addEventListener('pointerup', endSel);
+    el.addEventListener('pointercancel', endSel);
+  }
+  paintSel();
+
   /* ---------- undo / redo ---------- */
   // Every settings change (faders, master, knobs, ADSR, EQ/FX, pads, solo, single) is a step.
   // A drag counts as one step: it is recorded once the control has been still for a moment.
@@ -1064,7 +1140,6 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
   }
   $('oct-down').addEventListener('click', () => shift(-12));
   $('oct-up').addEventListener('click', () => shift(12));
-  $('sustain').addEventListener('click', () => { uiPedal = !uiPedal; syncPedal(); });
 
   function touchVel(e, el) {
     const r = el.getBoundingClientRect();
@@ -1354,7 +1429,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
 /* Auto-update: the website checks for a newer version every 15 s and reloads itself
    when nothing is being played. Settings are saved, so nothing is lost. */
 (() => {
-  const BUILD = '1794328785';
+  const BUILD = '1794329102';
   if (!/^https?:$/.test(location.protocol)) return;
   async function check() {
     try {
