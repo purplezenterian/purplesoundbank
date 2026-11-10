@@ -325,14 +325,22 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
   const fxIn = ctx.createGain();
   // Tremolo (replaces the old Chorus knob): one shared 5.5 Hz LFO; each stage gets its own depth.
   const tremLFO = ctx.createOscillator(); tremLFO.frequency.value = 5.5; tremLFO.start();
+  // Wide (stereo) tremolo: the left and right sides pulse in opposite phase, so the sound swings across the speakers.
   function makeTrem() {
-    const g = ctx.createGain(), d = ctx.createGain();
-    g.gain.value = 1; d.gain.value = 0;
-    tremLFO.connect(d); d.connect(g.gain);
-    return { g, setDepth: (n, tc) => { const dep = Math.min(1, Math.max(0, n)) * 0.9; g.gain.setTargetAtTime(1 - dep / 2, ctx.currentTime, tc || 0.03); d.gain.setTargetAtTime(dep / 2, ctx.currentTime, tc || 0.03); } };
+    const inp = ctx.createGain(); inp.channelCount = 2; inp.channelCountMode = 'explicit'; inp.channelInterpretation = 'speakers';
+    const sp = ctx.createChannelSplitter(2), mg = ctx.createChannelMerger(2);
+    const gL = ctx.createGain(), gR = ctx.createGain(), dL = ctx.createGain(), dR = ctx.createGain();
+    gL.gain.value = 1; gR.gain.value = 1; dL.gain.value = 0; dR.gain.value = 0;
+    tremLFO.connect(dL); tremLFO.connect(dR); dL.connect(gL.gain); dR.connect(gR.gain);
+    inp.connect(sp); sp.connect(gL, 0); sp.connect(gR, 1); gL.connect(mg, 0, 0); gR.connect(mg, 0, 1);
+    return { inp, out: mg, setDepth: (n, tc) => {
+      const dep = Math.min(1, Math.max(0, n)) * 0.95, T = ctx.currentTime, k = tc || 0.03;
+      gL.gain.setTargetAtTime(1 - dep / 2, T, k); gR.gain.setTargetAtTime(1 - dep / 2, T, k);
+      dL.gain.setTargetAtTime(dep / 2, T, k); dR.gain.setTargetAtTime(-dep / 2, T, k);   // opposite phase
+    } };
   }
   const gTrem = makeTrem();
-  eq[eq.length - 1].connect(gTrem.g); gTrem.g.connect(fxIn);
+  eq[eq.length - 1].connect(gTrem.inp); gTrem.out.connect(fxIn);
   const fxSum = ctx.createGain();
   fxIn.connect(fxSum);
 
@@ -446,7 +454,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
     tail.connect(chHP); chHP.connect(chHS); chHS.connect(chEQ[0]);
     for (let i = 0; i < chEQ.length - 1; i++) chEQ[i].connect(chEQ[i + 1]);
     tail = chEQ[chEQ.length - 1];
-    const chTrem = makeTrem(); tail.connect(chTrem.g); tail = chTrem.g;
+    const chTrem = makeTrem(); tail.connect(chTrem.inp); tail = chTrem.out;
     if (s.wide) {
       // Mid/side widening: keep the centre, boost the sides so the whole sound spreads out.
       const sp = ctx.createChannelSplitter(2), mg = ctx.createChannelMerger(2);
@@ -1870,7 +1878,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
 /* Auto-update: the website checks for a newer version every 15 s and reloads itself
    when nothing is being played. Settings are saved, so nothing is lost. */
 (() => {
-  const BUILD = '1794348540';
+  const BUILD = '1794348686';
   if (!/^https?:$/.test(location.protocol)) return;
   async function check() {
     try {
