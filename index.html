@@ -914,15 +914,16 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
       el.setAttribute('aria-valuenow', v.toFixed(2));
     }
     let y0 = 0, v0 = 0, drag = false;
-    let lastDown = 0;
+    let lastDown = 0, lpT = 0, lastY = 0, downY = 0;
     el.addEventListener('pointerdown', e => {
       const now = performance.now();
+      if (o.longPress) { clearTimeout(lpT); downY = lastY = e.clientY; lpT = setTimeout(() => { if (drag && Math.abs(lastY - downY) < 5 && o.longPress()) { v0 = v; y0 = lastY; } }, 550); }
       if (o.def && now - lastDown < 350) { lastDown = 0; drag = false; const d = o.def(); if (d !== null && d !== undefined) { set(d); o.onInput(v); } e.preventDefault(); return; }   // double tap: back to default
       lastDown = now;
       drag = true; y0 = e.clientY; v0 = v; el.setPointerCapture(e.pointerId); e.preventDefault();
     });
-    el.addEventListener('pointermove', e => { if (!drag) return; set(v0 + (y0 - e.clientY) / 140); o.onInput(v); });
-    const end = () => { drag = false; };
+    el.addEventListener('pointermove', e => { lastY = e.clientY; if (!drag) return; set(v0 + (y0 - e.clientY) / 140); o.onInput(v); });
+    const end = () => { drag = false; clearTimeout(lpT); };
     el.addEventListener('pointerup', end);
     el.addEventListener('pointercancel', end);
     el.addEventListener('keydown', e => {
@@ -1067,6 +1068,16 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
   const perSound = key => !!(single && focusCh && (key === 'eq' || key === 'fx'));
   const curVals = key => (perSound(key) ? focusCh.fxs[key] : MODES[key].val);
 
+  // Tremolo has two jobs on one knob: drag = Depth. Hold the knob still for half a second to switch it to Rate (and back).
+  let tremEdit = 'depth';
+  let tremRateN = store.get('tremRate', 0.45);
+  const tremHz = n => 0.3 * Math.pow(8 / 0.3, n);          // 0.3 Hz to 8 Hz
+  tremLFO.frequency.value = tremHz(tremRateN);
+  const nameOf = i => ((mode === 'fx' && i === 3 && tremEdit === 'rate') ? 'Trem Rate' : MODES[mode].names[i]);
+  function tremRefresh() {
+    if (mode === 'fx' && tremEdit === 'rate') { auxKnobs[3].set(tremRateN); auxNames[3].textContent = 'Trem Rate'; }
+  }
+
   let mode = 'aux';
   const auxHost = $('aux-knobs');
   const auxKnobs = [], auxNames = [], flashT = [];
@@ -1080,7 +1091,26 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
     col.append(kn, name);
     auxHost.appendChild(col);
     auxNames.push(name);
-    auxKnobs.push(makeKnob(kn, { label: 'Knob ' + (i + 1), def: () => (MODES[mode] ? MODES[mode].def[i] : null), onInput: n => {
+    auxKnobs.push(makeKnob(kn, { label: 'Knob ' + (i + 1),
+      longPress: () => {
+        if (!(mode === 'fx' && i === 3)) return false;
+        tremEdit = tremEdit === 'rate' ? 'depth' : 'rate';
+        auxKnobs[3].set(tremEdit === 'rate' ? tremRateN : curVals('fx')[3]);
+        auxNames[3].textContent = tremEdit === 'rate' ? 'Trem Rate' : 'Tremolo';
+        clearTimeout(flashT[3]);
+        try { navigator.vibrate && navigator.vibrate(20); } catch (e) {}
+        return true;
+      },
+      def: () => { if (mode === 'fx' && i === 3 && tremEdit === 'rate') return 0.45; return MODES[mode] ? MODES[mode].def[i] : null; },
+      onInput: n => {
+      if (mode === 'fx' && i === 3 && tremEdit === 'rate') {
+        tremRateN = n; store.set('tremRate', n);
+        tremLFO.frequency.setTargetAtTime(tremHz(n), ctx.currentTime, 0.05);
+        name.textContent = 'Rate ' + tremHz(n).toFixed(1) + ' Hz';
+        clearTimeout(flashT[i]);
+        flashT[i] = setTimeout(() => { if (mode === 'fx') name.textContent = nameOf(3); }, 900);
+        return;
+      }
       const m = MODES[mode];
       const sn = m.snapFn ? m.snapFn(i) : m.snap;
       if (sn !== undefined && Math.abs(n - sn) < 0.025) { n = sn; auxKnobs[i].set(n); }
@@ -1096,7 +1126,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
       name.textContent = m.fmt(i, n);
       clearTimeout(flashT[i]);
       const shown = mode;
-      flashT[i] = setTimeout(() => { if (mode === shown) name.textContent = MODES[mode].names[i]; }, 900);
+      flashT[i] = setTimeout(() => { if (mode === shown) name.textContent = nameOf(i); }, 900);
     } }));
   }
   const LEDT = { aux: 'Sound Reactor', eq: '5-Band EQ', fx: 'Filter / FX', lib: 'Sound Library' };
@@ -1119,6 +1149,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
       auxKnobs[i].set(curVals(mode)[i]);
       auxKnobs[i].el.setAttribute('aria-label', m.names[i]);
     }
+    if (mode === 'fx') tremRefresh();
     if (mode === 'lib') renderLib();
     for (const k of ['eq', 'fx', 'lib']) {
       $('mode-' + k).classList.toggle('on', mode === k);
@@ -1164,6 +1195,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
     const m = MODES[mode];
     if (!m || mode === 'aux') return;
     for (let i = 0; i < 5; i++) { auxKnobs[i].set(curVals(mode)[i]); auxNames[i].textContent = m.names[i]; }
+    tremRefresh();
   }
 
   /* ---------- faders ---------- */
@@ -1838,7 +1870,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
 /* Auto-update: the website checks for a newer version every 15 s and reloads itself
    when nothing is being played. Settings are saved, so nothing is lost. */
 (() => {
-  const BUILD = '1794348326';
+  const BUILD = '1794348540';
   if (!/^https?:$/.test(location.protocol)) return;
   async function check() {
     try {
