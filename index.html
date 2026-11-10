@@ -349,7 +349,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
       const eff = n0 < 0.01 ? 0 : 1 - (1 - n0) * (1 - tremStrength);          // strength pushes any depth up to the max
       const dep = eff * (0.95 + 0.05 * tremStrength), T = ctx.currentTime, k = lastTc;
       gL.gain.setTargetAtTime(1 - dep / 2, T, k); gR.gain.setTargetAtTime(1 - dep / 2, T, k);
-      dL.gain.setTargetAtTime(dep / 2, T, k); dR.gain.setTargetAtTime(-dep / 2 * 0.45, T, k);   // mostly opposite phase: wide, but 30% still survives in mono
+      dL.gain.setTargetAtTime(dep / 2, T, k); dR.gain.setTargetAtTime(-dep / 2 * 0.6, T, k);   // mostly opposite phase: wide, but 20% still survives in mono
     };
     const tr = { inp, out: mg, refresh: apply, setDepth: (n, tc) => { nn = n; lastTc = tc || 0.03; apply(); } };
     allTrems.push(tr);
@@ -1904,7 +1904,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
 /* Auto-update: the website checks for a newer version every 15 s and reloads itself
    when nothing is being played. Settings are saved, so nothing is lost. */
 (() => {
-  const BUILD = '1794349041';
+  const BUILD = '1794349072';
   if (!/^https?:$/.test(location.protocol)) return;
   async function check() {
     try {
