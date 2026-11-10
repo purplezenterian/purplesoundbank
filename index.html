@@ -328,8 +328,11 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
   fxIn.connect(fxSum);
 
   const chWet = ctx.createGain();
-  chWet.gain.value = 0;
+  chWet.gain.value = 1;
   chWet.connect(fxSum);
+  const chBus = ctx.createGain();            // everything that wants chorus feeds this
+  const chSendG = ctx.createGain(); chSendG.gain.value = 0;   // the All-sounds chorus amount
+  fxIn.connect(chSendG); chSendG.connect(chBus);
   [[0.017, 0.6, -0.8], [0.023, 0.83, 0.8]].forEach(([base, rate, pan]) => {
     const d = ctx.createDelay(0.1);
     d.delayTime.value = base;
@@ -338,7 +341,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
     const depth = ctx.createGain();
     depth.gain.value = 0.004;
     lfo.connect(depth); depth.connect(d.delayTime); lfo.start();
-    fxIn.connect(d);
+    chBus.connect(d);
     if (ctx.createStereoPanner) {
       const p = ctx.createStereoPanner();
       p.pan.value = pan;
@@ -363,10 +366,13 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
   const conv = ctx.createConvolver();
   conv.buffer = makeIR(2.4, 2.8);
   const revWet = ctx.createGain();
-  revWet.gain.value = 0;
+  revWet.gain.value = 1;
+  const revBus = ctx.createGain();           // everything that wants reverb feeds this
+  const revSendG = ctx.createGain(); revSendG.gain.value = 0;  // the All-sounds reverb amount
+  fxSum.connect(revSendG); revSendG.connect(revBus); revBus.connect(conv);
   const compIn = ctx.createGain(); compIn.gain.value = 0.3; compIn.connect(comp);   // gain-stage before the compressor so big chords never hit it hot
   fxSum.connect(compIn);
-  fxSum.connect(conv); conv.connect(revWet); revWet.connect(compIn);
+  conv.connect(revWet); revWet.connect(compIn);
 
   // Filter settings shared by every note (each note has its own filter so the envelope can sweep per note).
   const fx = { cutoff: 20000, reso: 0, env: 0 };
@@ -416,6 +422,13 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
       modLS = ctx.createBiquadFilter(); modLS.type = 'lowshelf'; modLS.frequency.value = 220; modLS.gain.value = 0;
       tail.connect(modLS); modLS.connect(modSweep); modSweep.connect(modHS); modHS.connect(modAir); tail = modAir;
     }
+    // Per-sound EQ + filter (flat until you edit this sound in Single mode).
+    const chHP = ctx.createBiquadFilter(); chHP.type = 'highpass'; chHP.frequency.value = 1; chHP.Q.value = 0.7;
+    const chHS = ctx.createBiquadFilter(); chHS.type = 'highshelf'; chHS.frequency.value = 5000; chHS.gain.value = 0;
+    const chEQ = EQ_BANDS.map(b => { const n = ctx.createBiquadFilter(); n.type = b.type; n.frequency.value = b.f; n.Q.value = b.q; n.gain.value = 0; return n; });
+    tail.connect(chHP); chHP.connect(chHS); chHS.connect(chEQ[0]);
+    for (let i = 0; i < chEQ.length - 1; i++) chEQ[i].connect(chEQ[i + 1]);
+    tail = chEQ[chEQ.length - 1];
     if (s.wide) {
       // Mid/side widening: keep the centre, boost the sides so the whole sound spreads out.
       const sp = ctx.createChannelSplitter(2), mg = ctx.createChannelMerger(2);
@@ -454,6 +467,8 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
       }
     }
     tail.connect(master);
+    const chSend = ctx.createGain(); chSend.gain.value = 0; tail.connect(chSend); chSend.connect(chBus);
+    const revSend = ctx.createGain(); revSend.gain.value = 0; tail.connect(revSend); revSend.connect(revBus);
     const dbgTail = tail;
     // Analog character (not on the Purple Grand): soft tube-style saturation that bites harder the harder you play,
     // a touch of low-mid warmth and a gently rounded top end.
@@ -471,7 +486,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
     // Poly sounds (pads): gain follows the number of sounding voices, so 32 notes plus their ringing tails stay clean.
     let polyG = null;
     if (s.poly) { polyG = ctx.createGain(); polyG.connect(inp); inp = polyG; }
-    return { dbgTail, polyG, alive: 0, held: 0, vox: [], inp, modLP, modHS, modAir, modSweep, modLS, mod: s.mod || 'vibrato', analog: !!s.analog, id: s.id, name: s.name, cat: s.cat || '', samples: s.samples, buffers: new Map(), keys: [], ready: false,
+    return { dbgTail, chEQ, chHP, chHS, chSend, revSend, fxo: { cutoff: 20000, reso: 0, env: 0 }, polyG, alive: 0, held: 0, vox: [], inp, modLP, modHS, modAir, modSweep, modLS, mod: s.mod || 'vibrato', analog: !!s.analog, id: s.id, name: s.name, cat: s.cat || '', samples: s.samples, buffers: new Map(), keys: [], ready: false,
              vol: store.get('vol.' + s.id, 1), mute: false, solo: false, out,
              trim: s.trim || 1, human: !!s.human, velDeep: !!s.velDeep, drift: !!s.drift, fat: !!s.fat, loop: s.loop || null, fatPan: s.fatPan || 0, fatSpread: s.fatSpread || 0, fatOffset: !!s.fatOffset, tame: !!s.tame, rel: s.rel || 0.09, loops: new Map(),
              env0: { a: 0, d: 0.5, s: 1, r: +((s.rel || 0.09) * 4).toFixed(2) } };
@@ -622,12 +637,13 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
       if (e.s < 0.999) g.gain.setTargetAtTime(ampc * e.s, t + at, Math.max(0.01, e.d) / 3);
       const f = ctx.createBiquadFilter();
       f.type = 'lowpass';
-      f.Q.value = fx.reso * 20;
-      const peak = Math.min(20000, fx.cutoff * Math.pow(2, fx.env * 5));
-      if (fx.env > 0.01 && peak > fx.cutoff * 1.01) {
+      const fc = Math.min(fx.cutoff, ch.fxo.cutoff), fr = Math.max(fx.reso, ch.fxo.reso), fe = Math.max(fx.env, ch.fxo.env);
+      f.Q.value = fr * 20;
+      const peak = Math.min(20000, fc * Math.pow(2, fe * 5));
+      if (fe > 0.01 && peak > fc * 1.01) {
         f.frequency.setValueAtTime(peak, t);
-        f.frequency.setTargetAtTime(fx.cutoff, t, Math.max(0.02, ch.env.d) / 3);
-      } else f.frequency.value = fx.cutoff;
+        f.frequency.setTargetAtTime(fc, t, Math.max(0.02, ch.env.d) / 3);
+      } else f.frequency.value = fc;
       const vf = ctx.createBiquadFilter();
       vf.type = 'lowpass'; vf.Q.value = 0;
       if (hv && hv.swell < 1) { vf.frequency.setValueAtTime(hv.cut * hv.swell, t); vf.frequency.linearRampToValueAtTime(hv.cut, t + Math.max(0.05, at * 1.6)); }
@@ -689,8 +705,8 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
     const live = [...active.values(), ...sustained];
     for (const v of live) for (const p of v.parts) {
       p.f.frequency.cancelScheduledValues(t);
-      p.f.frequency.setTargetAtTime(fx.cutoff, t, 0.03);
-      p.f.Q.setTargetAtTime(fx.reso * 20, t, 0.03);
+      p.f.frequency.setTargetAtTime(Math.min(fx.cutoff, p.ch.fxo.cutoff), t, 0.03);
+      p.f.Q.setTargetAtTime(Math.max(fx.reso, p.ch.fxo.reso) * 20, t, 0.03);
     }
   }
 
@@ -816,6 +832,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
       el.querySelector('.pstat').textContent = !c.ready ? 'Loading' : (c.solo ? 'Solo' : '');
     }
     ledText();
+    if (knobsReady) syncKnobs();
     $('single').classList.toggle('on', single);
     $('single').setAttribute('aria-pressed', String(single));
     $('solo').disabled = false;
@@ -981,8 +998,8 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
         }
         else if (i === 1) { fx.reso = n; updateFilters(); }
         else if (i === 2) fx.env = n;
-        else if (i === 3) chWet.gain.setTargetAtTime(n * 0.8, ctx.currentTime, 0.03);
-        else revWet.gain.setTargetAtTime(n * 0.9, ctx.currentTime, 0.03);
+        else if (i === 3) chSendG.gain.setTargetAtTime(n * 0.8, ctx.currentTime, 0.03);
+        else revSendG.gain.setTargetAtTime(n * 0.9, ctx.currentTime, 0.03);
       }
     }
   };
@@ -1001,6 +1018,31 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
   // Apply saved EQ and FX settings to the sound right away.
   for (const key of ['eq', 'fx']) MODES[key].val.forEach((n, i) => MODES[key].apply(i, n));
 
+  // Per-sound EQ/FX: in Single mode the knobs edit only the sound that is playing, and its settings stay with it.
+  var knobsReady = false;
+  for (const c of channels) {
+    c.fxs = { eq: store.get('sfx.' + c.id + '.eq', [0.5, 0.5, 0.5, 0.5, 0.5]).slice(0, 5), fx: store.get('sfx.' + c.id + '.fx', [0.5, 0, 0, 0, 0]).slice(0, 5) };
+    while (c.fxs.eq.length < 5) c.fxs.eq.push(0.5);
+    while (c.fxs.fx.length < 5) c.fxs.fx.push(0);
+  }
+  function applySound(c, key, i, n) {
+    const T = ctx.currentTime;
+    if (key === 'eq') { c.chEQ[i].gain.setTargetAtTime((n - 0.5) * 48, T, 0.02); return; }
+    if (i === 0) {
+      const r = Math.max(0, (n - 0.5) * 2);
+      if (n <= 0.5) { c.fxo.cutoff = cutoffHz(n * 2); c.chHP.frequency.setTargetAtTime(1, T, 0.03); c.chHS.gain.setTargetAtTime(0, T, 0.03); }
+      else { c.fxo.cutoff = 20000; c.chHP.frequency.setTargetAtTime(hpHz(n), T, 0.03); c.chHS.frequency.setTargetAtTime(5000 - 3000 * r, T, 0.03); c.chHS.gain.setTargetAtTime(r * 18, T, 0.03); }
+      updateFilters();
+    }
+    else if (i === 1) { c.fxo.reso = n; updateFilters(); }
+    else if (i === 2) c.fxo.env = n;
+    else if (i === 3) c.chSend.gain.setTargetAtTime(n * 0.8 * 0.8, T, 0.03);
+    else c.revSend.gain.setTargetAtTime(n * 0.9 * 0.8, T, 0.03);
+  }
+  for (const c of channels) for (const key of ['eq', 'fx']) c.fxs[key].forEach((n, i) => applySound(c, key, i, n));
+  const perSound = key => !!(single && focusCh && (key === 'eq' || key === 'fx'));
+  const curVals = key => (perSound(key) ? focusCh.fxs[key] : MODES[key].val);
+
   let mode = 'aux';
   const auxHost = $('aux-knobs');
   const auxKnobs = [], auxNames = [], flashT = [];
@@ -1018,9 +1060,15 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
       const m = MODES[mode];
       const sn = m.snapFn ? m.snapFn(i) : m.snap;
       if (sn !== undefined && Math.abs(n - sn) < 0.025) { n = sn; auxKnobs[i].set(n); }
-      m.val[i] = n;
-      store.set('knobs.' + mode, m.val);
-      m.apply(i, n);
+      if (perSound(mode)) {
+        focusCh.fxs[mode][i] = n;
+        store.set('sfx.' + focusCh.id + '.' + mode, focusCh.fxs[mode]);
+        applySound(focusCh, mode, i, n);
+      } else {
+        m.val[i] = n;
+        store.set('knobs.' + mode, m.val);
+        m.apply(i, n);
+      }
       name.textContent = m.fmt(i, n);
       clearTimeout(flashT[i]);
       const shown = mode;
@@ -1030,7 +1078,10 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
   const LEDT = { aux: 'Sound Reactor', eq: '5-Band EQ', fx: 'Filter / FX', lib: 'Sound Library' };
   function ledText() {
     const t = $('led-title');
-    if (t) t.textContent = LEDT[typeof mode === 'string' ? mode : 'aux'] || 'Sound Reactor';
+    if (t) {
+      const k = typeof mode === 'string' ? mode : 'aux';
+      t.textContent = (LEDT[k] || 'Sound Reactor') + ((knobsReady && perSound(k)) ? ' \u00b7 ' + focusCh.name + ' only' : '');
+    }
   }
   function setMode(next) {
     mode = next;
@@ -1041,7 +1092,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
     if (m) for (let i = 0; i < 5; i++) {
       clearTimeout(flashT[i]);
       auxNames[i].textContent = m.names[i];
-      auxKnobs[i].set(m.val[i]);
+      auxKnobs[i].set(curVals(mode)[i]);
       auxKnobs[i].el.setAttribute('aria-label', m.names[i]);
     }
     if (mode === 'lib') renderLib();
@@ -1082,6 +1133,14 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
   }
   $('lib-search').addEventListener('input', renderLib);
   setMode(MODES[ui.mode] || ui.mode === 'lib' ? ui.mode : 'aux');
+  knobsReady = true;
+  // Called whenever the selected sound or Single mode changes, so the knobs show the right set of values.
+  function syncKnobs() {
+    ledText();
+    const m = MODES[mode];
+    if (!m || mode === 'aux') return;
+    for (let i = 0; i < 5; i++) { auxKnobs[i].set(curVals(mode)[i]); auxNames[i].textContent = m.names[i]; }
+  }
 
   /* ---------- faders ---------- */
   function makeFader(el, o) {
@@ -1725,7 +1784,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
 /* Auto-update: the website checks for a newer version every 15 s and reloads itself
    when nothing is being played. Settings are saved, so nothing is lost. */
 (() => {
-  const BUILD = '1794342543';
+  const BUILD = '1794343262';
   if (!/^https?:$/.test(location.protocol)) return;
   async function check() {
     try {
