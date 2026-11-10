@@ -276,7 +276,16 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
   const comp = ctx.createDynamicsCompressor();
   comp.threshold.value = -10; comp.knee.value = 12; comp.ratio.value = 4;
   comp.attack.value = 0.003; comp.release.value = 0.2;
-  comp.connect(ctx.destination);
+  // Final safety stage so the output can never clip: a fast brickwall limiter, then a soft ceiling.
+  const limiter = ctx.createDynamicsCompressor();
+  limiter.threshold.value = -6; limiter.knee.value = 0; limiter.ratio.value = 20;
+  limiter.attack.value = 0.001; limiter.release.value = 0.09;
+  const ceil = ctx.createWaveShaper();
+  { const N = 2048, cv = new Float32Array(N);
+    for (let i = 0; i < N; i++) { const x = i / (N - 1) * 2 - 1; cv[i] = Math.tanh(x * 1.1) / Math.tanh(1.1) * 0.85; }
+    ceil.curve = cv; ceil.oversample = '4x'; }
+  comp.connect(limiter); limiter.connect(ceil); ceil.connect(ctx.destination);
+  const outTap = ceil;
 
   // Effects bus: master -> 5-band EQ -> chorus -> reverb -> compressor.
   const EQ_BANDS = [
@@ -1323,7 +1332,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
     const split = ctx.createChannelSplitter(2);
     const anL = ctx.createAnalyser(), anR = ctx.createAnalyser();
     anL.fftSize = anR.fftSize = 1024;
-    comp.connect(anS); comp.connect(split);
+    outTap.connect(anS); outTap.connect(split);
     split.connect(anL, 0); split.connect(anR, 1);
     const BARS = 72, F0 = 30, F1 = 16000;
     const spec = new Uint8Array(anS.frequencyBinCount);
@@ -1429,7 +1438,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
 /* Auto-update: the website checks for a newer version every 15 s and reloads itself
    when nothing is being played. Settings are saved, so nothing is lost. */
 (() => {
-  const BUILD = '1794329523';
+  const BUILD = '1794329694';
   if (!/^https?:$/.test(location.protocol)) return;
   async function check() {
     try {
