@@ -228,6 +228,25 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
 .black { position: absolute; top: 0; height: 60%; transform: translateX(-50%); background: linear-gradient(180deg, var(--key-black-top), var(--key-black-bot)); border: 1px solid #2a2142; border-top: 0; border-radius: 0 0 5px 5px; box-shadow: 0 3px 8px rgba(0, 0, 0, .8); z-index: 2; box-sizing: border-box; }
 .black.on { background: linear-gradient(180deg, #8a4dff, var(--glow-deep)); border-color: var(--glow); box-shadow: 0 0 16px rgba(var(--glow-rgb), .8); }
 @media (prefers-reduced-motion: no-preference) { .pad, .white, .black, .fbtn { transition: background-color .08s, box-shadow .12s, border-color .12s; } }
+
+.perf { display: none; flex: 1; min-height: 0; flex-direction: column; gap: 6px; position: relative; z-index: 1; }
+.mid.isperf .perf { display: flex; }
+.mid.isperf .led-idle, .mid.isperf .aux, .mid.isperf .lib { display: none !important; }
+.perf-now { font-family: var(--font-display); font-weight: 600; font-size: clamp(16px, 2.4vw, 24px); letter-spacing: .12em; text-transform: uppercase; color: #e5d4ff; text-shadow: 0 0 14px rgba(var(--glow-rgb), 1), 0 0 30px rgba(var(--glow-rgb), .5); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.perf-now small { display: block; font-size: 9px; letter-spacing: .24em; color: #5b4690; text-shadow: none; }
+.perf-list { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 3px; }
+.song { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; background: rgba(var(--glow-rgb), .06); border: 1px solid transparent; border-radius: 6px; padding: 6px 8px; min-height: 34px; color: #b79cff; font: 600 13px var(--font-display, inherit); letter-spacing: .08em; text-transform: uppercase; cursor: pointer; }
+.song .no { color: #5b4690; font-size: 11px; min-width: 18px; }
+.song .nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.song.on { background: rgba(var(--glow-rgb), .3); border-color: var(--glow); color: #fff; text-shadow: 0 0 8px rgba(var(--glow-rgb), 1); }
+.song .ed { display: none; gap: 3px; }
+.perf.editing .song .ed { display: flex; }
+.song .ed span { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 26px; border: 1px solid var(--line); border-radius: 5px; background: var(--field); color: #cdb8ff; font-size: 12px; }
+.song .ed span.x { color: #ff8aa8; }
+.perf-empty { color: #5b4690; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; padding: 10px 4px; line-height: 1.6; }
+.perf-bar { display: grid; grid-template-columns: 1fr 70px 1fr; gap: 6px; }
+.perf-bar .fbtn { height: 38px; min-width: 0; padding: 0; font-size: 12px; }
+#slotMenu .sheet input { width: 100%; box-sizing: border-box; height: 42px; border-radius: 8px; border: 1px solid var(--line); background: var(--field); color: var(--text); padding: 0 10px; font: 600 15px var(--font-display, inherit); margin-bottom: 8px; }
 </style>
 
 <div class="top">
@@ -246,15 +265,17 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
     <button class="fbtn" id="select" type="button" aria-pressed="false" title="Tap to arm, tap again to disarm. While it is on, tap sounds at the top to arm or disarm them straight away, or tap faders to move several together.">Select</button>
     <button class="fbtn" id="solo" type="button" aria-pressed="false">Solo</button>
     <button class="fbtn" id="single" type="button" aria-pressed="false" title="Only one sound plays at a time">Single</button>
-    <div class="stepper"><button id="oct-down" type="button" aria-label="Octave down">&minus;</button><span id="range">C2 &ndash; C3</span><button id="oct-up" type="button" aria-label="Octave up">+</button></div>
+    <div class="pair"><button class="fbtn on" id="m-patch" type="button" aria-pressed="true">Patch</button><button class="fbtn" id="m-perf" type="button" aria-pressed="false" title="Performance: your set list">Perform</button></div>
     <div class="pair"><button class="fbtn" id="mode-lib" type="button" aria-pressed="false">LIB</button><button class="fbtn" id="mode-eq" type="button" aria-pressed="false">EQ</button><button class="fbtn" id="mode-fx" type="button" aria-pressed="false">FX</button></div>
     <div class="pair"><button class="fbtn" id="undo" type="button" disabled title="Undo (Ctrl/Cmd+Z)">&#8630; Undo</button><button class="fbtn" id="redo" type="button" disabled title="Redo (Ctrl/Cmd+Shift+Z)">Redo &#8631;</button></div>
+    <button class="fbtn" id="saveas" type="button" title="Save this patch as a song in your set list" style="grid-column:1/-1">Save as&hellip;</button>
   </div>
   <div class="led" id="led">
     <div class="led-head"><span id="led-title">Sound</span><span class="sub">Purple SoundBank</span></div>
     <div class="led-idle"><canvas id="reactor" aria-label="Sound reactor: spectrum and level meters"></canvas></div>
     <div class="lib" id="lib"><div class="lib-cats" id="lib-cats" role="listbox" aria-label="Categories"></div><div class="lib-main"><input class="lib-search" id="lib-search" type="search" placeholder="SEARCH" aria-label="Search sounds" autocomplete="off"><div class="lib-list" id="lib-list" role="listbox" aria-label="Sounds"></div></div></div>
     <div class="aux" id="aux-knobs" role="group" aria-label="Extra knobs"></div>
+    <div class="perf" id="perf"><div class="perf-now" id="perf-now"></div><div class="perf-list" id="perf-list"></div><div class="perf-bar"><button class="fbtn" id="perf-prev" type="button" aria-label="Previous song">&#9664; Prev</button><button class="fbtn" id="perf-edit" type="button" aria-pressed="false">Edit</button><button class="fbtn" id="perf-next" type="button" aria-label="Next song">Next &#9654;</button></div></div>
   </div>
   <div class="adsr">
     <div class="adsr-top">
@@ -1653,6 +1674,124 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
     jump(e.shiftKey ? 1 : -1);
   });
 
+  /* ---------- songs: Patch / Performance ---------- */
+  let songs = store.get('songs', []);
+  let curSong = store.get('curSong', null);
+  let perfMode = false, perfEdit = false;
+  const saveSongs = () => { store.set('songs', songs); store.set('curSong', curSong); };
+  function songSnap() {
+    const o = snap();
+    o.order = order.slice(); o.off = [...off]; o.focus = focusCh ? focusCh.id : null;
+    o.sfx = {}; for (const c of channels) o.sfx[c.id] = { eq: c.fxs.eq.slice(), fx: c.fxs.fx.slice() };
+    o.tremRate = tremRateN; o.tremPow = tremPowN;
+    return o;
+  }
+  function songApply(o) {
+    if (o.order) {
+      const ids = channels.map(c => c.id);
+      const ord = o.order.filter((id, i) => ids.includes(id) && o.order.indexOf(id) === i);
+      for (const id of ids) if (!ord.includes(id)) ord.push(id);
+      order = ord;
+      off.clear(); (o.off || []).forEach(id => { if (ids.includes(id)) off.add(id); });
+      saveLayout();
+      for (const c of channels) c.off = !onBar(c);
+    }
+    restore(o);
+    if (o.sfx) for (const c of channels) {
+      const s = o.sfx[c.id]; if (!s) continue;
+      for (const key of ['eq', 'fx']) { c.fxs[key] = s[key].slice(); store.set('sfx.' + c.id + '.' + key, c.fxs[key]); c.fxs[key].forEach((n, i) => applySound(c, key, i, n)); }
+    }
+    if (o.tremRate !== undefined) { tremRateN = o.tremRate; store.set('tremRate', tremRateN); tremLFO.frequency.setTargetAtTime(tremHz(tremRateN), ctx.currentTime, 0.05); }
+    if (o.tremPow !== undefined) { tremPowN = o.tremPow; store.set('tremPow', tremPowN); setTremStrength(tremPowN); }
+    const f = o.focus && chOf(o.focus);
+    if (f && !f.off) focusCh = f;
+    if (single) enforceSingle();
+    saveOn(); applyBankOrder(); renderPads(); applyMix(); syncKnobs();
+  }
+  function recallSong(id) {
+    const s = songs.find(x => x.id === id); if (!s) return;
+    curSong = id; saveSongs();
+    songApply(s.data);
+    renderPerf();
+  }
+  function stepSong(d) {
+    if (!songs.length) return;
+    const i = songs.findIndex(x => x.id === curSong);
+    recallSong(songs[(i < 0 ? (d > 0 ? 0 : songs.length - 1) : (i + d + songs.length) % songs.length)].id);
+  }
+  function renderPerf() {
+    const perf = $('perf');
+    perf.classList.toggle('editing', perfEdit);
+    $('perf-edit').classList.toggle('on', perfEdit);
+    $('perf-edit').setAttribute('aria-pressed', String(perfEdit));
+    const cur = songs.find(x => x.id === curSong);
+    const now = $('perf-now'); now.textContent = '';
+    const sm = document.createElement('small'); sm.textContent = 'Set list';
+    now.append(sm, document.createTextNode(cur ? cur.name : (songs.length ? 'Pick a song' : 'No songs yet')));
+    const list = $('perf-list'); list.textContent = '';
+    if (!songs.length) {
+      const d = document.createElement('div'); d.className = 'perf-empty';
+      d.textContent = 'Build a patch, press Save as, and it lands here.';
+      list.appendChild(d);
+    }
+    songs.forEach((s, i) => {
+      const row = document.createElement('div'); row.className = 'song' + (s.id === curSong ? ' on' : '');
+      row.setAttribute('role', 'button'); row.tabIndex = 0;
+      const no = document.createElement('span'); no.className = 'no'; no.textContent = i + 1;
+      const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = s.name;
+      const ed = document.createElement('span'); ed.className = 'ed';
+      const mk = (txt, cls, fn) => { const b = document.createElement('span'); b.textContent = txt; if (cls) b.className = cls; b.addEventListener('click', e => { e.stopPropagation(); fn(); }); ed.appendChild(b); };
+      mk('▲', '', () => { if (i > 0) { [songs[i - 1], songs[i]] = [songs[i], songs[i - 1]]; saveSongs(); renderPerf(); } });
+      mk('▼', '', () => { if (i < songs.length - 1) { [songs[i + 1], songs[i]] = [songs[i], songs[i + 1]]; saveSongs(); renderPerf(); } });
+      mk('✎', '', () => nameDialog('Rename song', s.name, [{ label: 'Rename', fn: v => { s.name = v; saveSongs(); renderPerf(); } }]));
+      mk('✕', 'x', () => nameDialog('Delete “' + s.name + '”?', null, [{ label: 'Delete', cls: 'rm', fn: () => { songs = songs.filter(x => x !== s); if (curSong === s.id) curSong = null; saveSongs(); renderPerf(); } }]));
+      row.append(no, nm, ed);
+      row.addEventListener('click', () => recallSong(s.id));
+      row.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); recallSong(s.id); } });
+      list.appendChild(row);
+    });
+    const on = list.querySelector('.song.on'); if (on && on.scrollIntoView) on.scrollIntoView({ block: 'nearest' });
+  }
+  // A small dialog: optional name field plus one or more action buttons.
+  function nameDialog(title, value, actions) {
+    const sheet = document.createElement('div'); sheet.className = 'sheet';
+    const h = document.createElement('h3'); h.textContent = title; sheet.appendChild(h);
+    let inp = null;
+    if (value !== null) { inp = document.createElement('input'); inp.type = 'text'; inp.value = value; inp.maxLength = 40; inp.setAttribute('aria-label', 'Name'); sheet.appendChild(inp); }
+    const go = a => { const v = inp ? (inp.value.trim() || value) : null; closeSlotMenu(); a.fn(v); };
+    for (const a of actions) {
+      const b = document.createElement('button'); b.type = 'button'; b.className = 'opt' + (a.cls ? ' ' + a.cls : ''); b.textContent = a.label;
+      b.addEventListener('click', () => go(a)); sheet.appendChild(b);
+    }
+    const c = document.createElement('button'); c.type = 'button'; c.className = 'opt'; c.textContent = 'Cancel'; c.addEventListener('click', closeSlotMenu); sheet.appendChild(c);
+    if (inp) inp.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); go(actions[0]); } });
+    menuEl.textContent = ''; menuEl.appendChild(sheet); menuEl.classList.add('open');
+    if (inp) setTimeout(() => { inp.focus(); inp.select(); }, 30);
+  }
+  function saveAs() {
+    const cur = songs.find(x => x.id === curSong);
+    const acts = [{ label: 'Save as new song', fn: v => {
+      const s = { id: 's' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), name: v, data: songSnap() };
+      songs.push(s); curSong = s.id; saveSongs(); renderPerf(); flashSaved();
+    } }];
+    if (cur) acts.push({ label: 'Update “' + cur.name + '”', fn: () => { cur.data = songSnap(); saveSongs(); renderPerf(); flashSaved(); } });
+    nameDialog('Save as', 'Song ' + (songs.length + 1), acts);
+  }
+  function setPerf(on) {
+    perfMode = on;
+    document.querySelector('.mid').classList.toggle('isperf', on);
+    $('m-patch').classList.toggle('on', !on); $('m-patch').setAttribute('aria-pressed', String(!on));
+    $('m-perf').classList.toggle('on', on); $('m-perf').setAttribute('aria-pressed', String(on));
+    if (on) renderPerf();
+  }
+  $('m-patch').addEventListener('click', () => setPerf(false));
+  $('m-perf').addEventListener('click', () => setPerf(true));
+  for (const id of ['mode-lib', 'mode-eq', 'mode-fx']) $(id).addEventListener('click', () => setPerf(false));
+  $('saveas').addEventListener('click', saveAs);
+  $('perf-prev').addEventListener('click', () => stepSong(-1));
+  $('perf-next').addEventListener('click', () => stepSong(1));
+  $('perf-edit').addEventListener('click', () => { perfEdit = !perfEdit; renderPerf(); });
+
   /* ---------- keyboard ---------- */
   const kb = $('kb');
   const WHITE_PC = [0, 2, 4, 5, 7, 9, 11];
@@ -1681,10 +1820,9 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
     const last = Math.min(WN - 1, Math.max(first, Math.floor((kb.scrollLeft + kb.clientWidth) / W * WN + 0.01) - 1));
     const n0 = ALL_WHITES[first];
     start = Math.min(96, n0 + ((12 - n0 % 12) % 12));
-    $('range').textContent = noteName(n0) + ' \u2013 ' + noteName(ALL_WHITES[last]);
+    if ($('range')) $('range').textContent = noteName(n0) + ' \u2013 ' + noteName(ALL_WHITES[last]);
     const max = W - kb.clientWidth;
-    $('oct-down').disabled = kb.scrollLeft <= 1;
-    $('oct-up').disabled = kb.scrollLeft >= max - 1;
+    if ($('oct-down')) { $('oct-down').disabled = kb.scrollLeft <= 1; $('oct-up').disabled = kb.scrollLeft >= max - 1; }
     clearTimeout(saveT);
     saveT = setTimeout(() => store.set('start', start), 400);
   }
@@ -1737,8 +1875,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
     const oct = 7 / WN * kbin.offsetWidth;
     kb.scrollTo({ left: kb.scrollLeft + (d / 12) * oct, behavior: 'smooth' });
   }
-  $('oct-down').addEventListener('click', () => shift(-12));
-  $('oct-up').addEventListener('click', () => shift(12));
+  if ($('oct-down')) { $('oct-down').addEventListener('click', () => shift(-12)); $('oct-up').addEventListener('click', () => shift(12)); }
 
   function touchVel(e, el) {
     const r = el.getBoundingClientRect();
@@ -1884,6 +2021,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
     const cmd = st & 0xf0;
     if (cmd === 0x90 && d2 > 0) noteOn('m' + d1, d1, d2);
     else if (cmd === 0x80 || (cmd === 0x90 && d2 === 0)) noteOff('m' + d1);
+    else if (cmd === 0xC0) { if (songs[d1]) recallSong(songs[d1].id); }
     else if (cmd === 0xE0) { cancelAnimationFrame(springId); setBend(((d2 << 7) | d1) / 8192 - 1); }
     else if (cmd === 0xB0 && d1 === 1) setMod(d2 / 127);
     else if (cmd === 0xB0 && d1 === 64) { midiPedal = d2 >= 64; syncPedal(); }
@@ -2068,7 +2206,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
 /* Auto-update: the website checks for a newer version every 15 s and reloads itself
    when nothing is being played. Settings are saved, so nothing is lost. */
 (() => {
-  const BUILD = '1794355815';
+  const BUILD = '1794357897';
   if (!/^https?:$/.test(location.protocol)) return;
   async function check() {
     try {
