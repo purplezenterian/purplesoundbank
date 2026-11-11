@@ -672,8 +672,10 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
     const shape = velShape(note, vel);
     const amp = shape.amp;
     const parts = [];
+    const anySoloNow = channels.some(c => c.solo);
     for (const ch of channels) {
-      if (!ch.ready || ch.off) continue;
+      // Sounds that are switched off, muted or not soloed make no voices at all, so they cost nothing.
+      if (!ch.ready || ch.off || ch.mute || (anySoloNow && !ch.solo)) continue;
       const k = nearest(ch.keys, note);
       const layers = ch.fat ? [-1, 1] : [0];   // fat: two copies detuned apart and panned wide
       for (const dOff of layers) {
@@ -753,7 +755,10 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
     }
     lit(note, 1);
     // Polyphony: past 48 notes (held + pedal-sustained) the oldest one is let go.
-    while (active.size + sustained.size > 48) {
+    // Processing budget: past ~200 sounding layers (a note counts once per sound that is on) the oldest notes are let go,
+    // so the device never runs out of power and drops the whole sound.
+    const layersLive = () => { let n = 0; for (const x of active.values()) n += x.parts.length; for (const x of sustained) n += x.parts.length; return n; };
+    while ((active.size + sustained.size > 48 || layersLive() > 200) && active.size + sustained.size > 1) {
       const old = sustained.size ? sustained.values().next().value : active.values().next().value;
       if (!old || old === v) break;
       if (sustained.has(old)) release(old);
@@ -2063,7 +2068,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
 /* Auto-update: the website checks for a newer version every 15 s and reloads itself
    when nothing is being played. Settings are saved, so nothing is lost. */
 (() => {
-  const BUILD = '1794355293';
+  const BUILD = '1794355815';
   if (!/^https?:$/.test(location.protocol)) return;
   async function check() {
     try {
