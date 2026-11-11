@@ -182,7 +182,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
 .mid .kname { font-size: 10.5px; min-height: 13px; font-variant-numeric: tabular-nums; }
 .mid .seg button { height: 30px; padding: 0 8px; font-size: 11.5px; max-width: 104px; }
 .mid .fbtn.small { height: 30px; padding: 0 8px; font-size: 11.5px; }
-.bank { flex: 1; min-height: 120px; display: grid; grid-template-columns: repeat(8, 1fr) 1.25fr; gap: 4px; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 8px 8px 6px; }
+.bank { flex: 1; min-height: 164px; display: grid; grid-template-columns: repeat(8, 1fr) 1.25fr; gap: 4px; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 8px 8px 6px; }
 .chan { display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 0; }
 .chan.master { border-left: 1px solid var(--line); padding-left: 4px; }
 .chan .lbl { height: 24px; font-size: 9.5px; line-height: 1.2; color: var(--muted); text-align: center; overflow: hidden; display: flex; align-items: flex-start; justify-content: center; max-width: 100%; word-break: break-word; }
@@ -2272,7 +2272,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
 /* Auto-update: the website checks for a newer version every 15 s and reloads itself
    when nothing is being played. Settings are saved, so nothing is lost. */
 (() => {
-  const BUILD = '1794359520';
+  const BUILD = '1794359983';
   if (!/^https?:$/.test(location.protocol)) return;
   async function check() {
     try {
