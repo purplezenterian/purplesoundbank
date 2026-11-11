@@ -168,6 +168,10 @@
         else if (k === 'psb.curSong') { if (!A.autoSong) localStorage.setItem(k, sl.data[k]); }
         else localStorage.setItem(k, sl.data[k]); }); localStorage.setItem('site.setv', String(sl.v)); } } catch (e) {}
     try { const d = window.PSB_DEFAULTS || {}; Object.keys(d).forEach(k => { localStorage.setItem(k, d[k]); }); } catch (e) {}
+    let firstRun = false;
+    try { const ALL = ["purplegrand","purpleep2","polypad","multistrings","dminus22","zdkstrings","synbrass2","80spopbrass"]; const cur = localStorage.getItem('psb.off'); let arr = null; try { arr = JSON.parse(cur); } catch (x) {}
+      firstRun = !A.autoSong && (cur === null || (Array.isArray(arr) && ALL.every(id => arr.includes(id))));
+      if (firstRun) localStorage.setItem('psb.off', JSON.stringify(ALL)); } catch (e) {}
     document.body.classList.add('playing');
     const wrap = h('div', { class: 'play-wrap' }, h('div', { class: 'play-bar' }, h('b', null, C.siteName), h('span', { class: 'muted grow' }, 'One device at a time: signing in elsewhere will end this session.'),
       h('a', { class: 'btn small', href: '#/hub' }, 'Hub'), h('button', { class: 'btn small', onclick: () => leave('#/account') }, 'Account')),
@@ -178,7 +182,7 @@
     document.body.append(wrap);
     try { const fr3 = wrap.querySelector('iframe'); const putIO = () => { try { const d = fr3.contentDocument; if (!d || !d.body || d.__io || !d.getElementById('saveas')) return; d.__io = true; const sc = d.createElement('script'); sc.textContent = window.PSB_SONGIO; d.body.append(sc); } catch (e) {} }; fr3.addEventListener('load', () => { putIO(); setTimeout(putIO, 800); }); setTimeout(putIO, 1500); } catch (e) {}
     try { const fr1 = wrap.querySelector('iframe'); const fitIn = () => { try { const d = fr1.contentDocument, w = fr1.contentWindow; if (!d || !d.body) return; d.body.style.zoom = 1; const h = d.documentElement.scrollHeight, vh = w.innerHeight; if (h > vh + 2) d.body.style.zoom = Math.max(0.55, Math.floor(vh / h * 1000) / 1000); } catch (e) {} }; let ft = null; const soon = () => { clearTimeout(ft); ft = setTimeout(fitIn, 80); }; fr1.addEventListener('load', () => { soon(); try { fr1.contentWindow.addEventListener('resize', soon); new MutationObserver(soon).observe(fr1.contentDocument.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] }); } catch (e) {} }); setTimeout(soon, 1500); } catch (e) {}
-    { const auto = A.autoSong; A.autoSong = false; let tries = 0; const fr = wrap.querySelector('iframe'); const iv = setInterval(() => { try { const d = fr.contentDocument; const pb = d && [...d.querySelectorAll('button')].find(b => b.textContent.trim() === 'Perform'); if (pb) pb.click(); const row = auto ? (d && d.querySelector('.song.on')) : (d && [...d.querySelectorAll('.song')].find(x => { const n = x.querySelector('.nm'); return n && /^\s*basic worship\s*$/i.test(n.textContent); })); if (row) { if (auto || !row.classList.contains('on')) row.click(); clearInterval(iv); } } catch (e) {} if (++tries > 40) clearInterval(iv); }, 500); }
+    { const auto = A.autoSong; A.autoSong = false; let tries = 0; const fr = wrap.querySelector('iframe'); const iv = setInterval(() => { try { const d = fr.contentDocument; const pb = d && [...d.querySelectorAll('button')].find(b => b.textContent.trim() === 'Perform'); if (pb) pb.click(); if (firstRun && !auto) { if (pb) clearInterval(iv); return; } const row = auto ? (d && d.querySelector('.song.on')) : (d && [...d.querySelectorAll('.song')].find(x => { const n = x.querySelector('.nm'); return n && /^\s*basic worship\s*$/i.test(n.textContent); })); if (row) { if (auto || !row.classList.contains('on')) row.click(); clearInterval(iv); } } catch (e) {} if (++tries > 40) clearInterval(iv); }, 500); }
   };
 
   /* ---------- one-tap export of this browser's instrument settings ---------- */
