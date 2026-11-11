@@ -104,6 +104,7 @@
     const [sub, devices, prof] = await Promise.all([api.getSubscription(), api.myDevices(), api.me()]);
     S.sub = sub; S.profile = prof;
     const ok = A.query.get('checkout') === 'success';
+    if (ok && A.isMember()) { let nx = null; try { nx = localStorage.getItem('site.next'); localStorage.removeItem('site.next'); } catch (e) {} if (nx) return A.go('#' + nx); }
     const status = !sub ? h('p', { class: 'muted' }, 'You do not have a membership yet.') : h('dl', { class: 'kv' },
       h('dt', null, 'Status'), h('dd', null, ({ trialing: 'Free month (trial)', active: 'Active', past_due: 'Payment failed', canceled: 'Cancelled', incomplete: 'Not completed' })[sub.status] || sub.status),
       sub.status === 'trialing' && sub.trial_end ? [h('dt', null, 'Free until'), h('dd', null, A.date(sub.trial_end) + ' (then ' + C.price + ' a month)')] : null,

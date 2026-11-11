@@ -139,7 +139,7 @@
     const seg = path.split('/').filter(Boolean); const top = seg[0] || '';
     A.seg = seg; renderNav();
     if (S.blocker && !['terms', 'privacy', 'rules'].includes(top)) return blockerScreen();
-    if (!PUBLIC.has(top) && !S.session) { A.next = raw; return A.go('#/login'); }
+    if (!PUBLIC.has(top) && !S.session) { A.next = raw; try { if (/^\/?play/.test(raw)) localStorage.setItem('site.next', '/play'); } catch (e) {} return A.go('#/login'); }
     if (S.session && (top === 'login' || top === 'signup')) return A.go(A.isMember() ? '#/hub' : '#/pricing');
     if (!PUBLIC.has(top) && !NEEDS_LOGIN.has(top) && !A.isMember()) return A.go('#/pricing');
     if (top === '' && S.session && S.profile && S.profile.is_admin && A.isMember()) return A.go('#/play');
@@ -166,6 +166,6 @@
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') heartbeat(); });
   }
   A.boot = boot;
-  A.afterAuth = async () => { await refreshState(); const next = A.next; A.next = null; demoBar(); A.go(next && next !== '/login' && next !== '/signup' ? '#' + next : (A.isMember() ? '#/hub' : '#/pricing')); renderNav(); };
+  A.afterAuth = async () => { await refreshState(); const next = A.next; A.next = null; if (next && A.isMember()) { try { localStorage.removeItem('site.next'); } catch (e) {} } demoBar(); A.go(next && next !== '/login' && next !== '/signup' ? '#' + next : (A.isMember() ? '#/hub' : '#/pricing')); renderNav(); };
   A.kicked = kicked;
 })();
