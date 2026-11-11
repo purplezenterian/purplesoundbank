@@ -173,6 +173,7 @@
     const cleanup = () => { wrap.remove(); document.body.classList.remove('playing'); if (blobUrl) URL.revokeObjectURL(blobUrl); window.removeEventListener('hashchange', cleanup); };
     window.addEventListener('hashchange', cleanup);
     document.body.append(wrap);
+    try { const fr1 = wrap.querySelector('iframe'); const fitIn = () => { try { const d = fr1.contentDocument, w = fr1.contentWindow; if (!d || !d.body) return; d.body.style.zoom = 1; const h = d.documentElement.scrollHeight, vh = w.innerHeight; if (h > vh + 2) d.body.style.zoom = Math.max(0.55, Math.floor(vh / h * 1000) / 1000); } catch (e) {} }; let ft = null; const soon = () => { clearTimeout(ft); ft = setTimeout(fitIn, 80); }; fr1.addEventListener('load', () => { soon(); try { fr1.contentWindow.addEventListener('resize', soon); new MutationObserver(soon).observe(fr1.contentDocument.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] }); } catch (e) {} }); setTimeout(soon, 1500); } catch (e) {}
     { const fr0 = wrap.querySelector('iframe'); const install = () => { try {
       const d = fr0.contentDocument; if (!d || !d.body || d.__shareHook) return; d.__shareHook = true;
       const add = () => d.querySelectorAll('.song .ed').forEach(ed => { if (ed.querySelector('.sharebtn')) return;

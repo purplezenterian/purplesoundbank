@@ -2354,4 +2354,19 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
   },50);
 })();
 </script>
+<script>
+/* Fit the whole page to the screen height */
+(function(){
+  var t=null;
+  function fit(){
+    var b=document.body; b.style.zoom=1;
+    var h=document.documentElement.scrollHeight, vh=window.innerHeight;
+    if(h>vh+2){ b.style.zoom=Math.max(0.55, Math.floor(vh/h*1000)/1000); }
+  }
+  function soon(){ clearTimeout(t); t=setTimeout(fit,80); }
+  window.addEventListener('resize',soon); window.addEventListener('load',soon);
+  new MutationObserver(soon).observe(document.body,{childList:true,subtree:true,attributes:true,attributeFilter:['class']});
+  setTimeout(fit,300); setTimeout(fit,1500);
+})();
+</script>
 </body></html>
