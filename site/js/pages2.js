@@ -161,6 +161,7 @@
       for (;;) { const { done, value } = await rd.read(); if (done) break; parts.push(value); got += value.length; if (total) bar.firstChild.style.width = Math.round(got / total * 100) + '%'; status.textContent = 'Loading sounds… ' + (got / 1048576).toFixed(1) + ' MB'; }
       srcdoc = await new Blob(parts, { type: 'text/html' }).text(); src = null;
     }
+    try { const d = window.PSB_DEFAULTS || {}; Object.keys(d).forEach(k => { if (localStorage.getItem(k) === null) localStorage.setItem(k, d[k]); }); } catch (e) {}
     document.body.classList.add('playing');
     const wrap = h('div', { class: 'play-wrap' }, h('div', { class: 'play-bar' }, h('b', null, C.siteName), h('span', { class: 'muted grow' }, 'One device at a time: signing in elsewhere will end this session.'),
       h('a', { class: 'btn small', href: '#/hub' }, 'Hub'), h('button', { class: 'btn small', onclick: () => leave('#/account') }, 'Account')),
@@ -169,6 +170,15 @@
     const cleanup = () => { wrap.remove(); document.body.classList.remove('playing'); if (blobUrl) URL.revokeObjectURL(blobUrl); window.removeEventListener('hashchange', cleanup); };
     window.addEventListener('hashchange', cleanup);
     document.body.append(wrap);
+  };
+
+  /* ---------- one-tap export of this browser's instrument settings ---------- */
+  R.export = async () => {
+    A.setTitle('Export');
+    const o = {}; for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k.startsWith('psb.')) o[k] = localStorage.getItem(k); }
+    const txt = JSON.stringify(o), ta = h('textarea', { rows: 8, style: 'width:100%' }); ta.value = txt;
+    A.render(h('div', { class: 'card narrow center' }, h('h2', null, 'Your saved songs'), h('p', { class: 'muted' }, Object.keys(o).length + ' items found'),
+      h('button', { class: 'btn', onclick: async () => { ta.select(); try { await navigator.clipboard.writeText(txt); } catch (e) { document.execCommand('copy'); } A.toast && A.toast('Copied'); } }, 'Copy'), ta));
   };
 
   /* ---------- admin ---------- */

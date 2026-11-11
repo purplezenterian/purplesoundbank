@@ -1,0 +1,1 @@
+window.PSB_DEFAULTS = {};
