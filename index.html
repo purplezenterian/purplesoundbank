@@ -1999,7 +1999,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
     else if (kind === 'none') txt.textContent = 'No MIDI controller found';
     else if (kind === 'denied') txt.textContent = 'Tap to connect MIDI';
     else if (kind === 'blocked') txt.textContent = 'MIDI blocked here (' + names + ')';
-    else txt.textContent = 'MIDI not available in this browser';
+    else txt.textContent = 'MIDI needs Chrome or Edge (not Safari/iPhone)';
   }
   /* ---------- pitch bend + mod wheel ---------- */
   const wp = $('w-pitch'), wm = $('w-mod');
@@ -2098,6 +2098,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
     else if (cmd === 0xB0 && (d1 === 123 || d1 === 120)) {
       for (const id of [...active.keys()]) if (id[0] === 'm') noteOff(id);
     }
+    else if (cmd === 0xB0 && d1 === 121) { setBend(0); setMod(0); midiPedal = false; syncPedal(); }
   }
   let midiAcc = null;
   function bindMidi() {
