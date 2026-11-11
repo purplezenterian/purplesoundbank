@@ -93,7 +93,7 @@
       right = [h('a', { class: 'btn small', href: '#/login' }, 'Log in'), h('a', { class: 'btn small primary', href: '#/signup' }, 'Start free month')];
     }
     $('#nav').replaceChildren(h('div', { class: 'nav-in' }, h('a', { class: 'brand', href: S.session ? (A.isMember() ? '#/hub' : '#/pricing') : '#/' }, h('span', { class: 'mark' }, h('i'), h('i'), h('i')), h('span', null, C.siteName)), h('nav', { class: 'nav-links', 'aria-label': 'Main' }, links), h('div', { class: 'nav-right' }, right)));
-    $('#foot').replaceChildren(h('div', null, h('a', { href: '#/terms' }, 'Terms'), h('a', { href: '#/privacy' }, 'Privacy'), h('a', { href: '#/rules' }, 'Community rules')), h('p', { class: 'small' }, '© ' + new Date().getFullYear() + ' ' + C.siteName + '. Made for the church musician.'));
+    $('#foot').replaceChildren(h('div', null, h('a', { href: '#/terms' }, 'Terms'), h('a', { href: '#/privacy' }, 'Privacy'), h('a', { href: '#/rules' }, 'Community rules')), h('p', { class: 'small' }, '© ' + new Date().getFullYear() + ' ' + C.siteName + '.'));
     $('#nav').style.display = document.body.classList.contains('playing') ? 'none' : '';
     $('#foot').style.display = document.body.classList.contains('playing') ? 'none' : '';
   }

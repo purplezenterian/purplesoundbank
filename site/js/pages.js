@@ -17,7 +17,7 @@
          ['Layer and split', 'Stack pads and strings, hold a pad to swap or remove sounds, and shape each one on its own in Single mode.'],
          ['Made to be played hard', 'Velocity-aware, 32-note polyphony, a built-in limiter that keeps big chords clean and a mod wheel tuned for each sound.'],
          ['Plays with your keyboard', 'Plug in any MIDI keyboard, pedal and mod wheel included, or play the on-screen 88 keys.'],
-         ['A hub of players', 'Ask questions, share patches and swap ideas with other church musicians. Add friends and message them.'],
+         ['A hub of players', 'Ask questions, share patches and swap ideas with other players. Add friends and message them.'],
          ['Industry standard sounds', 'These are sounds used, and still being used, at the top level of the music industry by some of your favourite musicians.'],
          ['New every month', 'New sounds and performances are added every month, and everything is updated every month too. All included in your membership.']]
           .map(([t, d]) => h('div', { class: 'card feature' }, h('h3', null, t), h('p', { class: 'muted', style: 'margin:0' }, d))))),
@@ -31,7 +31,7 @@
       q('Can I use it on my phone and my laptop?', 'Yes, you can sign in on up to 3 devices, but an account can only be used on one device at a time. Opening it on a second device signs the first one out, so you will never be cut off by accident while playing: you always choose to take over.'),
       q('Does it work offline?', 'You need a connection to sign in and load the instrument. Once it has loaded, the sounds are already in your browser while the page stays open.'),
       q('How do I cancel?', 'Account > Manage billing. You keep access until the end of the period you have paid for.'),
-      q('Is the community moderated?', 'Yes. Members can report anything, admins review reports, and you can block anyone. Be kind and keep it about the music and ministry.')];
+      q('Is the community moderated?', 'Yes. Members can report anything, admins review reports, and you can block anyone. Be kind and keep it about the music.')];
   }
 
   /* ---------- pricing ---------- */
@@ -155,7 +155,7 @@
     h('h2', null, 'Your rights'), h('p', null, 'You can see, correct and delete your data. Delete your account from the Account page, or contact us. You can also complain to the Information Commissioner\'s Office (ico.org.uk).'),
     h('h2', null, 'How long we keep it'), h('p', null, 'While your account exists. When you delete your account your profile, posts, comments and messages are removed. ', todo('retention of billing records for tax purposes')) ]);
   R.rules = async () => legal('Community rules', [
-    h('p', { class: 'muted' }, 'The hub is for church musicians to learn from each other. Keep it welcoming.'),
-    h('ul', null, ['Be kind and respectful. No harassment, hate or personal attacks.', 'Keep it about the music and the ministry. No spam, adverts or selling.', 'Do not share other people\'s private information.', 'No sexual or violent content, and nothing illegal.', 'Do not share or sell the instrument\'s sounds or your login.', 'Use Report if something is wrong. Admins review reports and can remove content or accounts.', 'Use Block to stop someone contacting you.'].map(t => h('li', null, t))),
+    h('p', { class: 'muted' }, 'The hub is for players to learn from each other. Keep it welcoming.'),
+    h('ul', null, ['Be kind and respectful. No harassment, hate or personal attacks.', 'Keep it about the music. No spam, adverts or selling.', 'Do not share other people\'s private information.', 'No sexual or violent content, and nothing illegal.', 'Do not share or sell the instrument\'s sounds or your login.', 'Use Report if something is wrong. Admins review reports and can remove content or accounts.', 'Use Block to stop someone contacting you.'].map(t => h('li', null, t))),
     h('p', { class: 'muted' }, 'Break the rules and your posts may be removed or your account suspended.')]);
 })();

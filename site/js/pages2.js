@@ -2,7 +2,7 @@
 (function () {
   const A = window.PSB_APP, { h, api, C, state: S } = A;
   const R = A.routes;
-  const CATS = [['all', 'All'], ['general', 'General'], ['questions', 'Questions'], ['patches', 'Patches & tips'], ['gospel', 'Gospel & worship'], ['showtell', 'Show & tell']];
+  const CATS = [['all', 'All'], ['general', 'General'], ['questions', 'Questions'], ['patches', 'Patches & tips'], ['gospel', 'Styles & genres'], ['showtell', 'Show & tell']];
   const catName = k => (CATS.find(c => c[0] === k) || [0, k])[1];
   const meId = () => S.profile && S.profile.id;
   const ask = (title, text, label, fn) => A.modal(h('div', null, h('h2', null, title), h('p', { class: 'muted' }, text), h('div', { class: 'row' }, h('button', { class: 'btn danger', onclick: async () => { try { await fn(); A.closeModal(); } catch (e) { A.fail(e); } } }, label), h('button', { class: 'btn', onclick: A.closeModal }, 'Cancel'))));
@@ -84,7 +84,7 @@
       let color = u.avatar_color;
       const sw = h('div', { class: 'row', style: 'margin-bottom:12px' }, COLORS.map(c => h('button', { type: 'button', 'aria-label': 'Colour ' + c, style: 'width:30px;height:30px;border-radius:50%;border:2px solid ' + (c === color ? '#fff' : 'transparent') + ';background:' + c + ';cursor:pointer', onclick: ev => { color = c; [...sw.children].forEach(b => b.style.borderColor = 'transparent'); ev.currentTarget.style.borderColor = '#fff'; } })));
       card.append(head(), h('h3', null, 'Edit your profile'), h('label', null, 'Avatar colour'), sw,
-        A.form([{ name: 'display_name', label: 'Display name', value: u.display_name, max: 40 }, { name: 'bio', label: 'About you (what you play, your church…)', type: 'textarea', value: u.bio, max: 300 }], 'Save', async v => { await api.updateProfile({ display_name: v.display_name, bio: v.bio, avatar_color: color }); await A.refreshState(); A.toast('Saved'); A.route(); }));
+        A.form([{ name: 'display_name', label: 'Display name', value: u.display_name, max: 40 }, { name: 'bio', label: 'About you (what you play, your setup…)', type: 'textarea', value: u.bio, max: 300 }], 'Save', async v => { await api.updateProfile({ display_name: v.display_name, bio: v.bio, avatar_color: color }); await A.refreshState(); A.toast('Saved'); A.route(); }));
       return;
     }
     const fs = await api.friendStatus(u.id); const blocked = (await api.listFriends()).blocked.some(b => b.id === u.id || (b.user && b.user.id === u.id));
