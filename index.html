@@ -1718,7 +1718,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
     if (single) enforceSingle();
     saveOn(); applyBankOrder(); renderPads(); applyMix(); syncKnobs();
   }
-  window.__psbImportSong = function (s) { songs = songs.filter(x => x.id !== s.id); songs.push(s); curSong = s.id; saveSongs(); setPerf(true); renderPerf(); recallSong(s.id); };
+  window.__psbImportSong = function (s) { songs = songs.filter(x => x.id !== s.id); songs.push(s); curSong = s.id; saveSongs(); setPerf(true); renderPerf(); recallSong(s.id); setTimeout(function () { if (single) { enforceSingle(); saveOn(); renderPads(); applyMix(); syncKnobs(); } }, 150); };
   function recallSong(id) {
     const s = songs.find(x => x.id === id); if (!s) return;
     curSong = id; saveSongs();

@@ -1,0 +1,15 @@
+const { chromium } = require('playwright');
+const st=async p=>p.evaluate(()=>({single:document.getElementById('single').className+'|'+document.getElementById('single').getAttribute('aria-pressed'),pads:[...document.querySelectorAll('#pads .pad')].map(x=>x.querySelector('.pname').textContent+(x.className.replace('pad','').trim()?':'+x.className.replace('pad','').trim():'')).slice(0,4).join(' / '),ls:{single:localStorage.getItem('psb.single'),on:localStorage.getItem('psb.on')}}));
+(async()=>{const b=await chromium.launch();const c=await b.newContext({permissions:['clipboard-read','clipboard-write'],viewport:{width:1400,height:1000}});const p=await c.newPage();
+p.on('pageerror',e=>console.log('ERR',e.message));
+await p.goto('file:///home/claude/purplesoundbank/index.html');await p.waitForTimeout(3500);
+await p.click('#single');await p.waitForTimeout(300);console.log('A single on',JSON.stringify(await st(p)));
+await p.click('#m-perf');await p.click('#saveas');await p.keyboard.type('SM');await p.click('text=Save as new song');await p.waitForTimeout(500);
+await p.click('#copyurl');await p.waitForTimeout(600);
+await p.evaluate(()=>{localStorage.setItem('psb.songs','[]');localStorage.setItem('psb.single','false')});
+await p.reload();await p.waitForTimeout(3500);console.log('B fresh',JSON.stringify(await st(p)));
+await p.click('#m-perf');await p.click('#pasteurl');await p.waitForTimeout(1500);console.log('C pasted',JSON.stringify(await st(p)));
+await p.click('#m-patch');await p.waitForTimeout(300);
+const pads=await p.$$('#pads .pad:not(.empty)');await pads[1].click();await p.waitForTimeout(200);console.log('D click pad2',JSON.stringify(await st(p)));
+await pads[2].click();await p.waitForTimeout(200);console.log('E click pad3',JSON.stringify(await st(p)));
+await b.close();})();
