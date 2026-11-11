@@ -214,7 +214,8 @@
   };
 
   R.jedzenti = async () => {
-    const sl = await api.getNamedSetlist('jedzenti');
+    let sl = await api.getNamedSetlist('jedzenti');
+    if (!sl) { const g = await api.getSetlist(); sl = g && g.data; }
     if (!sl) { A.toast('That version is not published yet'); return A.go('#/hub'); }
     let mine = []; try { mine = JSON.parse(localStorage.getItem('psb.songs') || '[]'); } catch (x) {}
     let pub = []; try { pub = JSON.parse(sl['psb.songs'] || '[]'); } catch (x) {}
