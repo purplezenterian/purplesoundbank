@@ -163,7 +163,10 @@
       for (;;) { const { done, value } = await rd.read(); if (done) break; parts.push(value); got += value.length; if (total) bar.firstChild.style.width = Math.round(got / total * 100) + '%'; status.textContent = 'Loading sounds… ' + (got / 1048576).toFixed(1) + ' MB'; }
       srcdoc = await new Blob(parts, { type: 'text/html' }).text(); src = null;
     }
-    try { const sl = await api.getSetlist(); if (sl && sl.data && localStorage.getItem('site.setv') !== String(sl.v)) { Object.keys(sl.data).forEach(k => { if (k.startsWith('psb.')) localStorage.setItem(k, sl.data[k]); }); localStorage.setItem('site.setv', String(sl.v)); } } catch (e) {}
+    try { const sl = await api.getSetlist(); if (sl && sl.data && localStorage.getItem('site.setv') !== String(sl.v)) { Object.keys(sl.data).forEach(k => { if (!k.startsWith('psb.')) return;
+        if (k === 'psb.songs') { let mine = []; try { mine = JSON.parse(localStorage.getItem('psb.songs') || '[]'); } catch (x) {} let pub = []; try { pub = JSON.parse(sl.data[k]); } catch (x) {} const ids = new Set(pub.map(x => x.id)); localStorage.setItem(k, JSON.stringify(pub.concat(mine.filter(x => !ids.has(x.id))))); }
+        else if (k === 'psb.curSong') { if (!A.autoSong) localStorage.setItem(k, sl.data[k]); }
+        else localStorage.setItem(k, sl.data[k]); }); localStorage.setItem('site.setv', String(sl.v)); } } catch (e) {}
     try { const d = window.PSB_DEFAULTS || {}; Object.keys(d).forEach(k => { localStorage.setItem(k, d[k]); }); } catch (e) {}
     document.body.classList.add('playing');
     const wrap = h('div', { class: 'play-wrap' }, h('div', { class: 'play-bar' }, h('b', null, C.siteName), h('span', { class: 'muted grow' }, 'One device at a time: signing in elsewhere will end this session.'),
