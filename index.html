@@ -2291,4 +2291,33 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
 })();
 </script>
 
+<script>
+/* Share link icon in Perform > Edit (adds a copy-link button to each set list) */
+(function(){
+  var SB='https://qfwfwypkpzonsajhxeaz.supabase.co', KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFmd2Z3eXBrcHpvbnNhamh4ZWF6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQzNTcyMDcsImV4cCI6MjEwOTkzMzIwN30.BK-vOd5VQ5eEi3qOZ6PnoYVbIPd4f_spE7OkECG9TIA', SITE=location.origin + '/purplesoundbank/site/';
+  function token(){ try{ for(var i=0;i<localStorage.length;i++){ var k=localStorage.key(i); if(/^sb-.*-auth-token$/.test(k)){ var v=JSON.parse(localStorage.getItem(k)); if(v&&v.access_token) return v.access_token; } } }catch(e){} return null; }
+  function flash(b,t){ b.textContent=t; setTimeout(function(){ b.textContent='\uD83D\uDD17'; },1600); }
+  function add(){
+    document.querySelectorAll('.song .ed').forEach(function(ed){
+      if(ed.querySelector('.sharebtn')) return;
+      var b=document.createElement('span'); b.className='sharebtn'; b.textContent='\uD83D\uDD17'; b.title='Copy link to this set list';
+      b.addEventListener('click',function(e){
+        e.stopPropagation();
+        var row=ed.closest('.song'), idx=(+row.querySelector('.no').textContent)-1, songs=[];
+        try{ songs=JSON.parse(localStorage.getItem('psb.songs')||'[]'); }catch(x){}
+        var s=songs[idx]; if(!s){ flash(b,'!'); return; }
+        var t=token(); if(!t){ window.open(SITE+'#/login','_blank'); flash(b,'login'); return; }
+        fetch(SB+'/rest/v1/rpc/create_share',{method:'POST',headers:{'apikey':KEY,'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({n:s.name||'Song',s:s})})
+          .then(function(r){ if(!r.ok) throw new Error(r.status); return r.json(); })
+          .then(function(code){ var u=SITE+'#/s/'+code; var done=function(){ flash(b,'\u2713'); };
+            if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(u).then(done,function(){ prompt('Copy this link',u); }); }
+            else { prompt('Copy this link',u); } })
+          .catch(function(){ window.open(SITE+'#/login','_blank'); flash(b,'login'); });
+      });
+      ed.insertBefore(b, ed.firstChild);
+    });
+  }
+  new MutationObserver(add).observe(document.body,{childList:true,subtree:true}); add();
+})();
+</script>
 </body></html>
