@@ -2338,4 +2338,18 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
 })();
 </script>
 <style>.mid:not(.isperf) #copyurl, .mid:not(.isperf) #saveas{display:none}</style>
+<script>
+/* Boot into Perform with BASIC WORSHIP selected */
+(function(){
+  var tries=0, iv=setInterval(function(){
+    try{
+      var pb=document.getElementById('m-perf'); if(!pb) return;
+      if(!pb.classList.contains('on')) pb.click();
+      var rows=[].slice.call(document.querySelectorAll('.song')), r=rows.filter(function(x){ var n=x.querySelector('.nm'); return n && /^\s*basic worship\s*$/i.test(n.textContent); })[0];
+      if(r){ if(!r.classList.contains('on')) r.click(); clearInterval(iv); }
+    }catch(e){}
+    if(++tries>30) clearInterval(iv);
+  },400);
+})();
+</script>
 </body></html>

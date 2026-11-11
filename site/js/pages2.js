@@ -183,7 +183,7 @@
         ed.appendChild(b); });
       new MutationObserver(add).observe(d.body, { childList: true, subtree: true }); add(); } catch (e) {} };
       fr0.addEventListener('load', install); setTimeout(install, 1500); }
-    if (A.autoSong) { A.autoSong = false; let tries = 0; const fr = wrap.querySelector('iframe'); const iv = setInterval(() => { try { const d = fr.contentDocument; const pb = d && [...d.querySelectorAll('button')].find(b => b.textContent.trim() === 'Perform'); if (pb) pb.click(); const row = d && d.querySelector('.song.on'); if (row) { row.click(); clearInterval(iv); } } catch (e) {} if (++tries > 40) clearInterval(iv); }, 500); }
+    { const auto = A.autoSong; A.autoSong = false; let tries = 0; const fr = wrap.querySelector('iframe'); const iv = setInterval(() => { try { const d = fr.contentDocument; const pb = d && [...d.querySelectorAll('button')].find(b => b.textContent.trim() === 'Perform'); if (pb) pb.click(); const row = auto ? (d && d.querySelector('.song.on')) : (d && [...d.querySelectorAll('.song')].find(x => { const n = x.querySelector('.nm'); return n && /^\s*basic worship\s*$/i.test(n.textContent); })); if (row) { if (auto || !row.classList.contains('on')) row.click(); clearInterval(iv); } } catch (e) {} if (++tries > 40) clearInterval(iv); }, 500); }
   };
 
   /* ---------- one-tap export of this browser's instrument settings ---------- */
