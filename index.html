@@ -807,7 +807,8 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
     const t = ctx.currentTime;
     const live = [...active.values(), ...sustained];
     for (const v of live) for (const p of v.parts) {
-      p.f.frequency.cancelScheduledValues(t);
+      // Poly Pad: hold the filter where it is instead of snapping it back before gliding, so moving the wheel never clicks.
+      if (p.ch.id === 'polypad' && p.f.frequency.cancelAndHoldAtTime) p.f.frequency.cancelAndHoldAtTime(t); else p.f.frequency.cancelScheduledValues(t);
       const wm = p.ch.mod === 'cutoff' ? modVal : 0;
       p.f.frequency.setTargetAtTime(Math.min(20000, Math.min(fx.cutoff, p.ch.fxo.cutoff) * Math.pow(2, wm * 6)), t, 0.03);
       p.f.Q.setTargetAtTime(Math.min(1, Math.max(fx.reso, p.ch.fxo.reso) + wm * 0.15) * 20, t, 0.03);
@@ -2047,7 +2048,8 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
       const n = c.modKnob[0] + (c.modKnob[1] - c.modKnob[0]) * modVal;
       c.fxs.fx[0] = n;
       applySound(c, 'fx', 0, n);
-      store.set('sfx.' + c.id + '.fx', c.fxs.fx);
+      if (c.id === 'polypad') { clearTimeout(c._saveT); c._saveT = setTimeout(() => store.set('sfx.' + c.id + '.fx', c.fxs.fx), 300); }   // Poly Pad: save once the wheel stops, not on every wheel step
+      else store.set('sfx.' + c.id + '.fx', c.fxs.fx);
       if (knobsReady && mode === 'fx' && perSound('fx') && focusCh === c) {
         auxKnobs[0].set(n);
         auxNames[0].textContent = MODES.fx.fmt(0, n);
