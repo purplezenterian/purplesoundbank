@@ -11,7 +11,15 @@
     const cta = S.session ? h('a', { class: 'btn primary big', href: '#/pricing' }, 'Start your free month') : h('a', { class: 'btn primary big', href: '#/signup' }, 'Start your free month');
     A.render(
       h('section', { class: 'hero-brand' }, h('span', { class: 'mark big' }, h('i'), h('i'), h('i')), h('span', { class: 'name' }, C.siteName)),
-      h('section', { class: 'section' }, h('div', { class: 'card glow mid center' }, h('h2', { style: 'margin:0 0 8px' }, 'New sounds and performances added every month'), h('p', { class: 'muted', style: 'margin:0' }, 'Everything is updated every month too, and it is all included in your membership.'))),
+      h('section', { class: 'section' }, h('div', { class: 'grid g3' },
+        [['Seamless switching', 'Change sounds or songs mid-phrase. Notes you are already playing keep ringing, so there is never a gap.'],
+         ['Set lists', 'Build a patch, save it, and recall whole songs with one tap, the arrow keys or a MIDI program change.'],
+         ['Layer and split', 'Stack pads and strings, hold a pad to swap or remove sounds, and shape each one on its own in Single mode.'],
+         ['Made to be played hard', 'Velocity-aware, 32-note polyphony, a built-in limiter that keeps big chords clean and a mod wheel tuned for each sound.'],
+         ['Plays with your keyboard', 'Plug in any MIDI keyboard, pedal and mod wheel included, or play the on-screen 88 keys.'],
+         ['A hub of players', 'Ask questions, share patches and swap ideas with other church musicians. Add friends and message them.'],
+         ['New every month', 'New sounds and performances are added every month, and everything is updated every month too. All included in your membership.']]
+          .map(([t, d]) => h('div', { class: 'card feature' }, h('h3', null, t), h('p', { class: 'muted', style: 'margin:0' }, d))))),
       pricingCard(true),
       h('section', { class: 'section mid' }, h('h2', { class: 'center' }, 'Questions'), faq()));
   };
