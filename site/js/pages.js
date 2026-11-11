@@ -18,6 +18,7 @@
          ['Made to be played hard', 'Velocity-aware, 32-note polyphony, a built-in limiter that keeps big chords clean and a mod wheel tuned for each sound.'],
          ['Plays with your keyboard', 'Plug in any MIDI keyboard, pedal and mod wheel included, or play the on-screen 88 keys.'],
          ['A hub of players', 'Ask questions, share patches and swap ideas with other church musicians. Add friends and message them.'],
+         ['Industry standard sounds', 'These are sounds used, and still being used, at the top level of the music industry by some of your favourite musicians.'],
          ['New every month', 'New sounds and performances are added every month, and everything is updated every month too. All included in your membership.']]
           .map(([t, d]) => h('div', { class: 'card feature' }, h('h3', null, t), h('p', { class: 'muted', style: 'margin:0' }, d))))),
       pricingCard(true),
