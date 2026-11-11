@@ -10,9 +10,7 @@
     if (S.session && A.isMember()) return A.go('#/hub');
     const cta = S.session ? h('a', { class: 'btn primary big', href: '#/pricing' }, 'Start your free month') : h('a', { class: 'btn primary big', href: '#/signup' }, 'Start your free month');
     A.render(
-      h('section', { class: 'hero' }, h('h1', null, 'The keyboard sound for ', h('span', null, 'live worship')), h('p', { class: 'lead' }, 'Eight hand-tuned sampled instruments, a set list that never drops a note, and a community of players who get it. Runs in your browser.'),
-        h('div', { class: 'cta' }, cta, h('a', { class: 'btn big', href: '#/pricing' }, 'See pricing')), h('p', { class: 'small muted', style: 'margin-top:14px' }, 'First month free, then ' + C.price + ' a month. Cancel any time.'),
-        h('div', { class: 'pads-demo', 'aria-hidden': 'true' }, SOUNDS.map(s => h('div', null, s)))),
+      h('section', { class: 'hero-brand' }, h('span', { class: 'mark big' }, h('i'), h('i'), h('i')), h('span', { class: 'name' }, C.siteName)),
       h('section', { class: 'section' }, h('h2', { class: 'center' }, 'Built for the platform, not the studio'), h('div', { class: 'grid g3', style: 'margin-top:22px' },
         [['Seamless switching', 'Change sounds or songs mid-phrase. Notes you are already playing keep ringing, so there is never a gap.'],
          ['Set lists', 'Build a patch, save it, and recall whole songs with one tap, the arrow keys or a MIDI program change.'],

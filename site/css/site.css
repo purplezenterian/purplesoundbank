@@ -119,3 +119,8 @@ footer { border-top: 1px solid var(--line); padding: 22px 16px 34px; color: var(
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 body.playing #nav, body.playing #foot, body.playing #demo-bar { display: none; }
+
+.hero-brand { display: flex; align-items: center; justify-content: center; gap: 18px; padding: 56px 0 40px; }
+.hero-brand .name { font: 700 clamp(30px, 7vw, 52px) var(--font-display); color: var(--text); letter-spacing: -.01em; }
+.mark.big { width: clamp(52px, 11vw, 76px); height: clamp(52px, 11vw, 76px); border-radius: 18px; gap: 6px; }
+.mark.big i { width: 6px; } .mark.big i:nth-child(1) { height: 16px; } .mark.big i:nth-child(2) { height: 28px; } .mark.big i:nth-child(3) { height: 20px; }
