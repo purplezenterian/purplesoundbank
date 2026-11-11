@@ -71,7 +71,21 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
 .screen { background: #000; border: 1px solid var(--pad-edge); border-radius: 10px; padding: 6px; }
 .pads { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
 .pad { position: relative; min-width: 0; height: 50px; padding: 0 4px; box-sizing: border-box; border-radius: 6px; border: 1px solid var(--pad-edge); background: var(--pad); color: var(--muted); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; cursor: pointer; text-align: center; }
-.pad.empty { cursor: default; color: var(--faint); background: #07050c; border-color: #17112a; }
+.pad.empty { cursor: pointer; color: var(--faint); background: #07050c; border-color: #17112a; border-style: dashed; }
+.pad { touch-action: manipulation; -webkit-touch-callout: none; }
+.pad.lift { transform: scale(1.07); z-index: 5; border-color: #fff; box-shadow: 0 0 22px rgba(var(--glow-rgb), .9); }
+.pad.target { outline: 2px dashed #d9c2ff; outline-offset: 2px; }
+.chan.gone { visibility: hidden; }
+#slotMenu { position: fixed; inset: 0; z-index: 60; display: none; align-items: flex-start; justify-content: center; padding-top: 70px; background: rgba(2,1,6,.72); }
+#slotMenu.open { display: flex; }
+#slotMenu .sheet { width: min(340px, calc(100vw - 32px)); max-height: calc(100vh - 110px); overflow: auto; background: #0b0813; border: 1px solid var(--glow); border-radius: 14px; padding: 12px; box-shadow: 0 0 30px rgba(var(--glow-rgb), .5); }
+#slotMenu h3 { margin: 0 0 8px; font: 700 11px var(--font-display, inherit); letter-spacing: .18em; text-transform: uppercase; color: #b79cff; }
+#slotMenu .sub { margin: 10px 0 4px; font: 600 10px var(--font-display, inherit); letter-spacing: .14em; text-transform: uppercase; color: var(--faint); }
+#slotMenu .opt { display: flex; justify-content: space-between; align-items: center; width: 100%; text-align: left; background: none; border: 0; border-radius: 6px; padding: 9px 8px; color: #cdb8ff; font: 600 13px var(--font-display, inherit); cursor: pointer; }
+#slotMenu .opt:hover, #slotMenu .opt:active { background: rgba(var(--glow-rgb), .22); color: #fff; }
+#slotMenu .opt small { color: #6b5a9a; font-size: 10px; letter-spacing: .08em; text-transform: uppercase; }
+#slotMenu .opt.rm { color: #ff8aa8; }
+#slotMenu .opt.here { background: rgba(var(--glow-rgb), .28); color: #fff; }
 .pname { font-size: 12.5px; font-weight: 500; line-height: 1.15; max-width: 100%; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; word-break: break-word; }
 .pstat { font-size: 9.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--solo); min-height: 11px; }
 .pad.on { color: #fff; border-color: var(--glow); background: radial-gradient(120% 140% at 50% 0%, rgba(var(--glow-rgb), .3), rgba(var(--glow-rgb), .06) 70%), var(--pad); box-shadow: 0 0 14px rgba(var(--glow-rgb), .45), inset 0 0 14px rgba(var(--glow-rgb), .3); }
@@ -659,7 +673,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
     const amp = shape.amp;
     const parts = [];
     for (const ch of channels) {
-      if (!ch.ready) continue;
+      if (!ch.ready || ch.off) continue;
       const k = nearest(ch.keys, note);
       const layers = ch.fat ? [-1, 1] : [0];   // fat: two copies detuned apart and panned wide
       for (const dOff of layers) {
@@ -802,6 +816,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
   }
 
   function applyMix() {
+    for (const c of channels) if (c.off) { c.mute = true; c.solo = false; }
     const anySolo = channels.some(c => c.solo);
     for (const c of channels) {
       const audible = !c.mute && (!anySolo || c.solo);
@@ -816,14 +831,28 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
   let focusCh = channels.find(c => c.id === ui.focus) || channels[0] || null;
   // Every sound starts armed (layered) on each load, with nothing soloed.
   channels.forEach(c => { c.mute = false; c.solo = false; });
+  // Patch bar layout: `order` is the sound in each slot, `off` are sounds taken off the bar (they go silent and stop using CPU).
+  let order = (() => {
+    const saved = store.get('order', []); const ids = channels.map(c => c.id);
+    const o = saved.filter((id, i) => ids.includes(id) && saved.indexOf(id) === i);
+    for (const id of ids) if (!o.includes(id)) o.push(id);
+    return o;
+  })();
+  const off = new Set(store.get('off', []).filter(id => channels.some(c => c.id === id)));
+  const chOf = id => channels.find(c => c.id === id) || null;
+  const slotCh = i => { const c = order[i] ? chOf(order[i]) : null; return c && !off.has(c.id) ? c : null; };
+  const onBar = c => { const i = order.indexOf(c.id); return i >= 0 && i < SLOTS && !off.has(c.id); };
+  const saveLayout = () => { store.set('order', order); store.set('off', [...off]); };
+  channels.forEach(c => { c.off = !onBar(c); if (c.off) c.mute = true; });
   let single = store.get('single', false);
   // Single mode keeps exactly one sound on: the selected one.
   function enforceSingle() {
     if (!single || !channels.length) return;
-    const keep = (focusCh && !focusCh.mute) ? focusCh : (channels.find(c => !c.mute) || channels[0]);
-    for (const c of channels) { c.mute = c !== keep; c.solo = false; }
+    const keep = (focusCh && !focusCh.mute && !focusCh.off) ? focusCh : (channels.find(c => !c.mute && !c.off) || channels.find(c => !c.off) || channels[0]);
+    for (const c of channels) { c.mute = c !== keep || c.off; c.solo = false; }
     focusCh = keep;
   }
+  if (focusCh && focusCh.off) focusCh = channels.find(c => !c.off) || focusCh;
   enforceSingle();
   const saveOn = () => { const o = {}; channels.forEach(c => { o[c.id] = !c.mute; }); store.set('on', o); };
   const padsEl = $('pads');
@@ -831,8 +860,11 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
   function renderPads() {
     padsEl.textContent = '';
     for (let i = 0; i < SLOTS; i++) {
-      const c = channels[i];
-      const el = document.createElement(c ? 'button' : 'div');
+      const c = slotCh(i);
+      const el = document.createElement('button');
+      el.type = 'button';
+      el.dataset.slot = i;
+      el.title = 'Hold to move, swap or remove';
       el.className = 'pad' + (c ? '' : ' empty');
       const name = document.createElement('span');
       name.className = 'pname';
@@ -845,14 +877,119 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
         const st = document.createElement('span');
         st.className = 'pstat';
         el.appendChild(st);
-        el.addEventListener('click', () => tapPad(c));
+        el.addEventListener('click', () => { if (performance.now() - padLiftEnd < 400) return; tapPad(c); });
       } else {
-        el.setAttribute('aria-hidden', 'true');
+        el.title = 'Tap to add a sound';
         el.appendChild(name);
+        el.addEventListener('click', () => { if (performance.now() - padLiftEnd < 400) return; openSlotMenu(i); });
       }
       padsEl.appendChild(el);
     }
     refreshUI();
+  }
+
+  /* ---------- patch bar layout: hold a pad to swap, move or remove it ---------- */
+  let padLiftEnd = -1e9;
+  const firstEmptySlot = () => { for (let i = 0; i < SLOTS; i++) if (!slotCh(i)) return i; return -1; };
+  function layoutChanged() {
+    for (const c of channels) {
+      const was = !!c.off;
+      c.off = !onBar(c);
+      if (c.off) { c.mute = true; c.solo = false; }
+      else if (was) c.mute = false;           // a sound that just came onto the bar is switched on
+    }
+    if (focusCh && focusCh.off) focusCh = channels.filter(c => !c.off).sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id))[0] || focusCh;
+    saveLayout();
+    if (single) enforceSingle();
+    saveOn();
+    applyBankOrder();
+    renderPads();
+    applyMix();
+  }
+  function applyBankOrder() {
+    for (const c of channels) {
+      const x = faders.get(c.id); if (!x) continue;
+      x.col.style.order = order.indexOf(c.id);
+      x.col.classList.toggle('gone', !!c.off);
+    }
+    const m = document.querySelector('.chan.master'); if (m) m.style.order = 99;
+  }
+  function swapSlots(i, j) {
+    if (i === j) return;
+    [order[i], order[j]] = [order[j], order[i]];
+    layoutChanged();
+  }
+  function placeOnBar(c, j) {
+    const occ = slotCh(j);
+    const idx = order.indexOf(c.id);
+    if (idx !== j) [order[idx], order[j]] = [order[j], order[idx]];
+    off.delete(c.id);
+    if (occ && occ !== c && (idx >= SLOTS || c.off)) off.add(occ.id);   // brought in from off the bar: whoever was there steps off
+    layoutChanged();
+  }
+  function removeFromBar(c) { off.add(c.id); layoutChanged(); }
+
+  const menuEl = document.createElement('div');
+  menuEl.id = 'slotMenu';
+  document.body.appendChild(menuEl);
+  const closeSlotMenu = () => menuEl.classList.remove('open');
+  menuEl.addEventListener('click', e => { if (e.target === menuEl) closeSlotMenu(); });
+  window.addEventListener('keydown', e => { if (e.key === 'Escape') closeSlotMenu(); });
+  function openSlotMenu(i) {
+    const cur = slotCh(i);
+    const sheet = document.createElement('div'); sheet.className = 'sheet';
+    const h = document.createElement('h3'); h.textContent = 'Slot ' + (i + 1) + (cur ? ' · ' + cur.name : ' · empty'); sheet.appendChild(h);
+    const add = (label, tag, cls, fn) => {
+      const b = document.createElement('button'); b.type = 'button'; b.className = 'opt' + (cls ? ' ' + cls : '');
+      const s1 = document.createElement('span'); s1.textContent = label; b.appendChild(s1);
+      if (tag) { const s2 = document.createElement('small'); s2.textContent = tag; b.appendChild(s2); }
+      b.addEventListener('click', () => { closeSlotMenu(); fn(); });
+      sheet.appendChild(b);
+    };
+    if (cur) add('Remove from bar', '', 'rm', () => removeFromBar(cur));
+    const sub = document.createElement('div'); sub.className = 'sub'; sub.textContent = cur ? 'Swap in' : 'Put here'; sheet.appendChild(sub);
+    for (const c of channels) {
+      const at = onBar(c) ? order.indexOf(c.id) : -1;
+      add(c.name, c === cur ? 'here' : (at >= 0 ? 'slot ' + (at + 1) + ' · swap' : 'off bar'), c === cur ? 'here' : '', () => { if (c !== cur) placeOnBar(c, i); });
+    }
+    const sub2 = document.createElement('div'); sub2.className = 'sub'; sub2.textContent = 'Layout'; sheet.appendChild(sub2);
+    add('Reset to original order', '', '', () => { order = channels.map(c => c.id); off.clear(); layoutChanged(); });
+    menuEl.textContent = ''; menuEl.appendChild(sheet); menuEl.classList.add('open');
+  }
+  // Hold a pad until it lifts: drop it on another pad to swap places, or let go in place for the menu.
+  {
+    let g = null;
+    const slotAt = (x, y) => { const el = document.elementFromPoint(x, y); const pe = el && el.closest ? el.closest('.pad') : null; return pe && pe.dataset.slot !== undefined ? +pe.dataset.slot : -1; };
+    const clearMarks = () => padsEl.querySelectorAll('.pad.lift, .pad.target').forEach(e => e.classList.remove('lift', 'target'));
+    padsEl.addEventListener('contextmenu', e => e.preventDefault());
+    padsEl.addEventListener('pointerdown', e => {
+      const pe = e.target.closest('.pad'); if (!pe || pe.dataset.slot === undefined || e.button > 0) return;
+      const slot = +pe.dataset.slot;
+      g = { id: e.pointerId, slot, x: e.clientX, y: e.clientY, lifted: false, over: -1, timer: 0 };
+      g.timer = setTimeout(() => {
+        if (!g) return;
+        g.lifted = true; pe.classList.add('lift');
+        try { navigator.vibrate && navigator.vibrate(15); } catch (_) {}
+      }, 450);
+    });
+    window.addEventListener('pointermove', e => {
+      if (!g || e.pointerId !== g.id) return;
+      if (!g.lifted) { if (Math.hypot(e.clientX - g.x, e.clientY - g.y) > 12) { clearTimeout(g.timer); g = null; } return; }
+      const s = slotAt(e.clientX, e.clientY);
+      if (s !== g.over) { padsEl.querySelectorAll('.pad.target').forEach(x => x.classList.remove('target')); g.over = s; const t = s >= 0 && s !== g.slot ? padsEl.querySelector('.pad[data-slot="' + s + '"]') : null; if (t) t.classList.add('target'); }
+    });
+    const end = e => {
+      if (!g || e.pointerId !== g.id) return;
+      clearTimeout(g.timer);
+      const was = g; g = null;
+      if (!was.lifted) return;
+      padLiftEnd = performance.now();
+      clearMarks();
+      const s = e.type === 'pointercancel' ? -1 : slotAt(e.clientX, e.clientY);
+      if (s >= 0 && s !== was.slot) swapSlots(was.slot, s); else openSlotMenu(was.slot);
+    };
+    window.addEventListener('pointerup', end);
+    window.addEventListener('pointercancel', end);
   }
 
   // First tap selects a sound and turns it on. Tapping the selected sound again turns it off.
@@ -912,7 +1049,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
     single = !single;
     store.set('single', single);
     if (single) enforceSingle();
-    else channels.forEach(c => { c.mute = false; });   // leaving Single layers every sound
+    else channels.forEach(c => { c.mute = !!c.off; });   // leaving Single layers every sound on the bar
     saveOn();
     applyMix();
   });
@@ -1235,6 +1372,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
       b.className = 'lib-row' + (focusCh === c && !c.mute ? ' on' : '');
       b.innerHTML = '<span></span><span class="n"></span>'; b.firstChild.textContent = c.name; b.lastChild.textContent = c.cat || '';
       b.addEventListener('click', () => {
+        if (c.off) { const e = firstEmptySlot(); placeOnBar(c, e >= 0 ? e : Math.max(0, order.indexOf(focusCh ? focusCh.id : ''))); }
         c.mute = false; focusCh = c; if (single) enforceSingle(); saveOn(); applyMix(); renderLib();
       });
       list.appendChild(b);
@@ -1353,6 +1491,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
   ghost.innerHTML = '<button type="button" tabindex="-1">S</button>';
   mcol.append(mfe, mlbl, ghost);
   bankEl.appendChild(mcol);
+  applyBankOrder();
   const masterFader = makeFader(mfe, { label: 'Master volume', min: 0, max: 1, value: master.gain.value, def: master.gain.value,
     onInput: n => { master.gain.value = n; store.set('master', n); } });
 
@@ -1924,7 +2063,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
 /* Auto-update: the website checks for a newer version every 15 s and reloads itself
    when nothing is being played. Settings are saved, so nothing is lost. */
 (() => {
-  const BUILD = '1794353470';
+  const BUILD = '1794355293';
   if (!/^https?:$/.test(location.protocol)) return;
   async function check() {
     try {
