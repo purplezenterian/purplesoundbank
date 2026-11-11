@@ -161,6 +161,7 @@
       for (;;) { const { done, value } = await rd.read(); if (done) break; parts.push(value); got += value.length; if (total) bar.firstChild.style.width = Math.round(got / total * 100) + '%'; status.textContent = 'Loading sounds… ' + (got / 1048576).toFixed(1) + ' MB'; }
       srcdoc = await new Blob(parts, { type: 'text/html' }).text(); src = null;
     }
+    try { const sl = await api.getSetlist(); if (sl && sl.data && localStorage.getItem('site.setv') !== String(sl.v)) { Object.keys(sl.data).forEach(k => { if (k.startsWith('psb.')) localStorage.setItem(k, sl.data[k]); }); localStorage.setItem('site.setv', String(sl.v)); } } catch (e) {}
     try { const d = window.PSB_DEFAULTS || {}; Object.keys(d).forEach(k => { if (localStorage.getItem(k) === null) localStorage.setItem(k, d[k]); }); } catch (e) {}
     document.body.classList.add('playing');
     const wrap = h('div', { class: 'play-wrap' }, h('div', { class: 'play-bar' }, h('b', null, C.siteName), h('span', { class: 'muted grow' }, 'One device at a time: signing in elsewhere will end this session.'),
@@ -178,7 +179,7 @@
     const o = {}; for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k.startsWith('psb.')) o[k] = localStorage.getItem(k); }
     const txt = JSON.stringify(o), ta = h('textarea', { rows: 8, style: 'width:100%' }); ta.value = txt;
     A.render(h('div', { class: 'card narrow center' }, h('h2', null, 'Your saved songs'), h('p', { class: 'muted' }, Object.keys(o).length + ' items found'),
-      h('button', { class: 'btn', onclick: async () => { ta.select(); try { await navigator.clipboard.writeText(txt); } catch (e) { document.execCommand('copy'); } A.toast && A.toast('Copied'); } }, 'Copy'), ta));
+      h('button', { class: 'btn', onclick: async () => { ta.select(); try { await navigator.clipboard.writeText(txt); } catch (e) { document.execCommand('copy'); } A.toast && A.toast('Copied'); } }, 'Copy'), (A.state && A.state.profile && A.state.profile.is_admin) || true ? h('button', { class: 'btn primary', style: 'margin-left:8px', onclick: async () => { try { await api.setSetlist(txt); alert('Published. Members get it next time they press Play.'); } catch (e) { A.fail(e); } } }, 'Publish to members') : null, ta));
   };
 
   /* ---------- admin ---------- */
@@ -189,6 +190,7 @@
       const [rs, rp] = await Promise.all([api.adminResets(), api.adminReports()]);
       const B = (t, fn, cls) => h('button', { class: 'btn small ' + (cls || ''), onclick: async () => { try { await fn(); await draw(); await A.refreshState(); } catch (e) { A.fail(e); } } }, t);
       wrap.replaceChildren(h('h1', { style: 'font-size:30px' }, 'Admin'),
+        h('div', { class: 'card', style: 'margin-bottom:14px' }, h('h3', null, 'Set list for members'), h('p', { class: 'small muted' }, 'Open #/export on your device, Copy, paste here, Publish. Members get it next time they press Play.'), (() => { const t = h('textarea', { rows: 4, style: 'width:100%' }); return h('div', null, t, h('button', { class: 'btn primary small', onclick: async () => { try { await api.setSetlist(t.value.trim()); alert('Published'); } catch (e) { A.fail(e); } } }, 'Publish')); })()),
         h('div', { class: 'card', style: 'margin-bottom:14px' }, h('h3', null, 'Device change requests (' + rs.length + ')'), h('p', { class: 'small muted' }, 'Members who lost or replaced a device. Approving frees their device slots so they can sign in on the new one.'),
           rs.length ? rs.map(r => h('div', { class: 'list-row' }, h('div', { class: 'grow' }, A.who(r.user), h('div', { class: 'small muted' }, (r.reason || 'No reason') + ' · ' + A.ago(r.created_at))), B('Approve', () => api.adminResolveReset(r.id, true), 'primary'), B('Decline', () => api.adminResolveReset(r.id, false)))) : h('p', { class: 'muted' }, 'Nothing waiting.')),
         h('div', { class: 'card' }, h('h3', null, 'Reports (' + rp.length + ')'), rp.length ? rp.map(r => h('div', { class: 'list-row' }, h('div', { class: 'grow' }, h('b', null, r.target_type + ' #' + r.target_id), h('div', { class: 'small' }, r.reason), h('div', { class: 'small muted' }, 'by ' + ((r.reporter && r.reporter.username) || '?') + ' · ' + A.ago(r.created_at))),

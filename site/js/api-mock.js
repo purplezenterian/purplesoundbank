@@ -224,6 +224,8 @@
     async adminResets() { const m = me(); if (!m.is_admin) throw err('Admins only'); return S.resets.filter(r => r.status === 'pending').map(r => Object.assign({}, r, { user: pub(byId(r.user_id)) })); },
     async adminResolveReset(id, approve) { const m = me(); if (!m.is_admin) throw err('Admins only'); const r = S.resets.find(x => x.id === id); if (!r) return; r.status = approve ? 'approved' : 'declined'; if (approve) { S.devices = S.devices.filter(d => d.userId !== r.user_id); delete S.active[r.user_id]; } save(); },
     async adminReports() { const m = me(); if (!m.is_admin) throw err('Admins only'); return S.reports.filter(r => !r.resolved).map(r => Object.assign({}, r, { reporter: pub(byId(r.reporter_id)) })); },
+    async getSetlist() { return null; },
+    async setSetlist() {},
     async adminResolveReport(id) { const m = me(); if (!m.is_admin) throw err('Admins only'); const r = S.reports.find(x => x.id === id); if (r) { r.resolved = true; save(); } },
     async deleteAccount() { const m = me(); S.accounts = S.accounts.filter(a => a.id !== m.id); S.users = S.users.filter(u => u.id !== m.id); S.devices = S.devices.filter(d => d.userId !== m.id); delete S.active[m.id]; delete S.subs[m.id]; S.posts.forEach(p => { if (p.author_id === m.id) p.deleted = true; }); S.current = null; save(); },
 

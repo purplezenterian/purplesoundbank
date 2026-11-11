@@ -160,6 +160,8 @@
     async adminResets() { return q(sb.from('device_reset_requests').select('id,user_id,note,created_at,user:profiles!device_reset_requests_user_id_fkey(' + prof + ')').eq('status', 'pending').order('id')); },
     async adminResolveReset(id, approve) { await fnOrThrow('admin-reset-device', { requestId: id, approve }); },
     async adminReports() { return q(sb.from('reports').select('id,target_type,target_id,reason,created_at,reporter:profiles!reports_reporter_id_fkey(' + prof + ')').eq('resolved', false).order('id')); },
+    async getSetlist() { try { return unwrap(await sb.rpc('get_setlist')); } catch (e) { return null; } },
+    async setSetlist(txt) { await q(sb.rpc('set_setlist', { v: txt })); },
     async adminResolveReport(id) { await q(sb.from('reports').update({ resolved: true }).eq('id', id)); },
     async deleteAccount() { await fnOrThrow('delete-account', { confirm: 'DELETE' }); await sb.auth.signOut(); },
     demo: null,
