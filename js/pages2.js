@@ -162,7 +162,7 @@
       srcdoc = await new Blob(parts, { type: 'text/html' }).text(); src = null;
     }
     try { const sl = await api.getSetlist(); if (sl && sl.data && localStorage.getItem('site.setv') !== String(sl.v)) { Object.keys(sl.data).forEach(k => { if (k.startsWith('psb.')) localStorage.setItem(k, sl.data[k]); }); localStorage.setItem('site.setv', String(sl.v)); } } catch (e) {}
-    try { const d = window.PSB_DEFAULTS || {}; Object.keys(d).forEach(k => { if (localStorage.getItem(k) === null) localStorage.setItem(k, d[k]); }); } catch (e) {}
+    try { const d = window.PSB_DEFAULTS || {}; Object.keys(d).forEach(k => { localStorage.setItem(k, d[k]); }); } catch (e) {}
     document.body.classList.add('playing');
     const wrap = h('div', { class: 'play-wrap' }, h('div', { class: 'play-bar' }, h('b', null, C.siteName), h('span', { class: 'muted grow' }, 'One device at a time: signing in elsewhere will end this session.'),
       h('a', { class: 'btn small', href: '#/hub' }, 'Hub'), h('button', { class: 'btn small', onclick: () => leave('#/account') }, 'Account')),
