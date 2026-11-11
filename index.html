@@ -232,10 +232,10 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
 .perf { display: none; flex: 1; min-height: 0; flex-direction: column; gap: 6px; position: relative; z-index: 1; }
 .mid.isperf .perf { display: flex; }
 .mid.isperf .led-idle, .mid.isperf .aux, .mid.isperf .lib { display: none !important; }
-.perf-now { font-family: var(--font-display); font-weight: 600; font-size: clamp(16px, 2.4vw, 24px); letter-spacing: .12em; text-transform: uppercase; color: #e5d4ff; text-shadow: 0 0 14px rgba(var(--glow-rgb), 1), 0 0 30px rgba(var(--glow-rgb), .5); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.perf-now small { display: block; font-size: 9px; letter-spacing: .24em; color: #5b4690; text-shadow: none; }
-.perf-list { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 3px; }
-.song { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; background: rgba(var(--glow-rgb), .06); border: 1px solid transparent; border-radius: 6px; padding: 6px 8px; min-height: 34px; color: #b79cff; font: 600 13px var(--font-display, inherit); letter-spacing: .08em; text-transform: uppercase; cursor: pointer; }
+.perf-now { flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; font-family: var(--font-display); font-weight: 600; font-size: clamp(16px, 2.4vw, 24px); letter-spacing: .12em; text-transform: uppercase; color: #e5d4ff; text-shadow: 0 0 14px rgba(var(--glow-rgb), 1), 0 0 30px rgba(var(--glow-rgb), .5); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.perf-now small { display: block; margin-bottom: 2px; font-size: 9px; letter-spacing: .24em; color: #5b4690; text-shadow: none; }
+.perf-list { flex: none; overflow-x: auto; overflow-y: hidden; display: flex; flex-direction: row; gap: 4px; padding-bottom: 2px; }
+.song { display: flex; flex: none; max-width: 210px; align-items: center; gap: 8px; text-align: left; background: rgba(var(--glow-rgb), .06); border: 1px solid transparent; border-radius: 6px; padding: 6px 8px; min-height: 34px; color: #b79cff; font: 600 13px var(--font-display, inherit); letter-spacing: .08em; text-transform: uppercase; cursor: pointer; }
 .song .no { color: #5b4690; font-size: 11px; min-width: 18px; }
 .song .nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .song.on { background: rgba(var(--glow-rgb), .3); border-color: var(--glow); color: #fff; text-shadow: 0 0 8px rgba(var(--glow-rgb), 1); }
@@ -2206,7 +2206,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
 /* Auto-update: the website checks for a newer version every 15 s and reloads itself
    when nothing is being played. Settings are saved, so nothing is lost. */
 (() => {
-  const BUILD = '1794357897';
+  const BUILD = '1794358216';
   if (!/^https?:$/.test(location.protocol)) return;
   async function check() {
     try {
