@@ -2338,18 +2338,20 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
 })();
 </script>
 <style>.mid:not(.isperf) #copyurl, .mid:not(.isperf) #saveas{display:none}</style>
+<style id="bootHide">.mid{visibility:hidden}</style>
 <script>
-/* Boot into Perform with BASIC WORSHIP selected */
+/* Boot straight into Perform with BASIC WORSHIP selected (no visible switching) */
 (function(){
-  var tries=0, iv=setInterval(function(){
+  var tries=0, done=function(){ var h=document.getElementById('bootHide'); if(h) h.remove(); },
+  iv=setInterval(function(){
     try{
       var pb=document.getElementById('m-perf'); if(!pb) return;
       if(!pb.classList.contains('on')) pb.click();
       var rows=[].slice.call(document.querySelectorAll('.song')), r=rows.filter(function(x){ var n=x.querySelector('.nm'); return n && /^\s*basic worship\s*$/i.test(n.textContent); })[0];
-      if(r){ if(!r.classList.contains('on')) r.click(); clearInterval(iv); }
+      if(r){ if(!r.classList.contains('on')) r.click(); clearInterval(iv); done(); }
     }catch(e){}
-    if(++tries>30) clearInterval(iv);
-  },400);
+    if(++tries>60){ clearInterval(iv); done(); }
+  },50);
 })();
 </script>
 </body></html>
