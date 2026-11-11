@@ -31,7 +31,8 @@
   A.ago = iso => { const s = Math.max(1, (Date.now() - Date.parse(iso)) / 1000); if (s < 60) return 'just now'; if (s < 3600) return Math.floor(s / 60) + 'm ago'; if (s < 86400) return Math.floor(s / 3600) + 'h ago'; if (s < 86400 * 30) return Math.floor(s / 86400) + 'd ago'; return new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }); };
   A.date = iso => new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' });
   A.avatar = (u, cls) => h('span', { class: 'av ' + (cls || ''), style: 'background:' + ((u && u.avatar_color) || '#7b2fff'), 'aria-hidden': 'true' }, ((u && (u.display_name || u.username)) || '?').trim().charAt(0));
-  A.who = u => h('a', { class: 'who', href: '#/u/' + u.username }, A.avatar(u, 'sm'), u.display_name || u.username);
+  A.badge = u => u && u.is_admin ? h('span', { class: 'pill pin', style: 'margin-left:6px' }, 'Admin') : null;
+  A.who = u => h('a', { class: 'who', href: '#/u/' + u.username }, A.avatar(u, 'sm'), u.display_name || u.username, A.badge(u));
   A.go = hash => { if (location.hash === hash) route(); else location.hash = hash; };
   A.isMember = () => !!(S.sub && ['trialing', 'active'].includes(S.sub.status) && !S.blocker);
   A.setTitle = t => { document.title = t ? t + ' · ' + C.siteName : C.siteName; };

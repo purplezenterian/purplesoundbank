@@ -13,7 +13,7 @@
   function postCard(p) {
     const lo = linkOnly(p.body);
     return h('a', Object.assign({ class: 'post' + (p.pinned ? ' pinned' : ''), href: lo ? lo.href : '#/hub/post/' + p.id }, lo && lo.ext ? { target: '_blank', rel: 'noopener noreferrer' } : {}),
-      h('div', { class: 'meta' }, p.pinned ? h('span', { class: 'pill pin' }, 'Pinned') : null, h('span', { class: 'pill' }, catName(p.category)), h('span', null, p.author.display_name || p.author.username), h('span', null, A.ago(p.created_at))),
+      h('div', { class: 'meta' }, p.pinned ? h('span', { class: 'pill pin' }, 'Pinned') : null, h('span', { class: 'pill' }, catName(p.category)), h('span', null, p.author.display_name || p.author.username, A.badge(p.author)), h('span', null, A.ago(p.created_at))),
       h('h3', null, p.title), h('p', null, p.body),
       h('div', { class: 'meta', style: 'margin-top:8px' }, h('span', null, '♥ ' + p.like_count), h('span', null, '💬 ' + p.comment_count)));
   }
