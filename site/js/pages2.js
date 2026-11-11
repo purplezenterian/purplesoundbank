@@ -16,8 +16,8 @@
       h('div', { class: 'meta' }, p.pinned ? h('span', { class: 'pill pin' }, 'Pinned') : null, h('span', { class: 'pill' }, catName(p.category)), h('span', null, p.author.display_name || p.author.username, A.badge(p.author)), h('span', null, A.ago(p.created_at))),
       h('h3', null, p.title), h('p', null, p.body),
       (lo && lo.href === '#/jedzenti' && A.state.profile && A.state.profile.is_admin) ? h('button', { class: 'btn primary small', style: 'margin:6px 0', onclick: async e => {
-        e.preventDefault(); e.stopPropagation(); const o = {}; for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k.startsWith('psb.') && k !== 'psb.did') o[k] = localStorage.getItem(k); }
-        try { const txt = JSON.stringify(o); await api.setSetlist(txt); await api.setNamedSetlist('jedzenti', txt); const n = (() => { try { return JSON.parse(o['psb.songs'] || '[]').length; } catch (x) { return 0; } })(); A.toast('Published to all members (' + n + ' songs)'); } catch (er) { A.fail(er); } } }, 'Publish to members') : null,
+        e.preventDefault(); e.stopPropagation(); const btn = e.currentTarget; const o = {}; for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k.startsWith('psb.') && k !== 'psb.did') o[k] = localStorage.getItem(k); }
+        try { const txt = JSON.stringify(o); await api.setSetlist(txt); await api.setNamedSetlist('jedzenti', txt); const n = (() => { try { return JSON.parse(o['psb.songs'] || '[]').length; } catch (x) { return 0; } })(); btn.textContent = 'Published \u2713'; try { localStorage.setItem('site.pubdone', '1'); } catch (x) {} A.toast('Published to all members (' + n + ' songs)'); } catch (er) { A.fail(er); } } }, (() => { try { return localStorage.getItem('site.pubdone') ? 'Published \u2713' : 'Publish to members'; } catch (x) { return 'Publish to members'; } })()) : null,
       h('div', { class: 'meta', style: 'margin-top:8px' }, h('span', null, '♥ ' + p.like_count), h('span', null, '💬 ' + p.comment_count)));
   }
   R.hub = async segs => {
