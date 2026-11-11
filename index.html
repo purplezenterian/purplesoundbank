@@ -234,8 +234,8 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
 .mid.isperf .led-idle, .mid.isperf .aux, .mid.isperf .lib { display: none !important; }
 .perf-now { flex: none; text-align: center; font-family: var(--font-display); font-weight: 600; font-size: clamp(16px, 2.4vw, 24px); letter-spacing: .12em; text-transform: uppercase; color: #e5d4ff; text-shadow: 0 0 14px rgba(var(--glow-rgb), 1), 0 0 30px rgba(var(--glow-rgb), .5); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .perf-now small { display: block; margin-bottom: 2px; font-size: 9px; letter-spacing: .24em; color: #5b4690; text-shadow: none; }
-.perf-list { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; display: flex; flex-direction: column; gap: 3px; }
-.song { box-sizing: border-box; display: flex; flex: none; width: 100%; align-items: center; gap: 8px; text-align: left; background: rgba(var(--glow-rgb), .06); border: 1px solid transparent; border-radius: 6px; padding: 6px 8px; min-height: 34px; color: #b79cff; font: 600 13px var(--font-display, inherit); letter-spacing: .08em; text-transform: uppercase; cursor: pointer; }
+.perf-list { flex: none; height: 232px; overflow-y: auto; overflow-x: hidden; display: flex; flex-direction: column; gap: 3px; }
+.song { box-sizing: border-box; display: flex; flex: none; width: 100%; align-items: center; gap: 8px; text-align: left; background: rgba(var(--glow-rgb), .06); border: 1px solid transparent; border-radius: 6px; padding: 4px 8px; min-height: 30px; color: #b79cff; font: 600 13px var(--font-display, inherit); letter-spacing: .08em; text-transform: uppercase; cursor: pointer; }
 .song .no { color: #5b4690; font-size: 11px; min-width: 18px; }
 .song .nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .song.on { background: rgba(var(--glow-rgb), .3); border-color: var(--glow); color: #fff; text-shadow: 0 0 8px rgba(var(--glow-rgb), 1); }
@@ -1717,7 +1717,8 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
   function stepSong(d) {
     if (!songs.length) return;
     const i = songs.findIndex(x => x.id === curSong);
-    recallSong(songs[(i < 0 ? (d > 0 ? 0 : songs.length - 1) : (i + d + songs.length) % songs.length)].id);
+    const n = i < 0 ? (d > 0 ? 0 : songs.length - 1) : Math.min(songs.length - 1, Math.max(0, i + d));   // stops at the ends, never wraps mid-show
+    if (n !== i) recallSong(songs[n].id);
   }
   function renderPerf() {
     const perf = $('perf');
@@ -1750,7 +1751,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
       row.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); recallSong(s.id); } });
       list.appendChild(row);
     });
-    const on = list.querySelector('.song.on'); if (on && on.scrollIntoView) on.scrollIntoView({ block: 'nearest' });
+    const on = list.querySelector('.song.on'); if (on) list.scrollTop = Math.max(0, on.offsetTop - list.offsetTop);   // current song at the top, the next ones below it
   }
   // A small dialog: optional name field plus one or more action buttons.
   function nameDialog(title, value, actions) {
@@ -1788,6 +1789,15 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
   $('m-perf').addEventListener('click', () => setPerf(true));
   for (const id of ['mode-lib', 'mode-eq', 'mode-fx']) $(id).addEventListener('click', () => setPerf(false));
   $('saveas').addEventListener('click', saveAs);
+  window.addEventListener('keydown', e => {
+    if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+    if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
+    const tg = e.target, tag = tg && tg.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (tg && tg.isContentEditable)) return;
+    if (menuEl.classList.contains('open') || !songs.length) return;
+    e.preventDefault(); e.stopPropagation();   // with a set list, the arrows always change song (even if a fader or knob has focus)
+    stepSong(e.key === 'ArrowDown' ? 1 : -1);
+  }, true);
   $('perf-prev').addEventListener('click', () => stepSong(-1));
   $('perf-next').addEventListener('click', () => stepSong(1));
   $('perf-edit').addEventListener('click', () => { perfEdit = !perfEdit; renderPerf(); });
@@ -2206,7 +2216,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
 /* Auto-update: the website checks for a newer version every 15 s and reloads itself
    when nothing is being played. Settings are saved, so nothing is lost. */
 (() => {
-  const BUILD = '1794358604';
+  const BUILD = '1794358896';
   if (!/^https?:$/.test(location.protocol)) return;
   async function check() {
     try {
