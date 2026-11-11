@@ -449,7 +449,10 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
   conv.connect(revWet); revWet.connect(compIn);
 
   // Filter settings shared by every note (each note has its own filter so the envelope can sweep per note).
-  const fx = { cutoff: 20000, reso: 0, env: 0 };
+  const fx = { cutoff: 20000, reso: 0, env: 0, glide: 0 };
+  // Glide (portamento): 0 = off, up to about 1.5 s. Each new note slides up or down from the last note played.
+  const glideSecs = n => n < 0.02 ? 0 : 0.02 * Math.pow(75, n);
+  let lastGlideNote = null;
 
 
   function b64ToBuf(b64) {
@@ -569,7 +572,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
     // Poly sounds (pads): gain follows the number of sounding voices, so 32 notes plus their ringing tails stay clean.
     let polyG = null;
     if (s.poly) { polyG = ctx.createGain(); polyG.connect(inp); inp = polyG; }
-    return { vib: s.vib || 0, bite: s.bite || 0, chTrem, modKnob: s.modKnob || null, modLPs, modRange: s.modRange || [300, 1000], modReso: s.modReso || 0, modMk: s.modMk || [0, 0], modTrim, dbgTail, chEQ, chHP, chHS, chSend, revSend, fxo: { cutoff: 20000, reso: 0, env: 0 }, polyG, alive: 0, held: 0, vox: [], inp, modLP, modHS, modAir, modSweep, modLS, mod: s.mod || 'vibrato', analog: !!s.analog, id: s.id, name: s.name, cat: s.cat || '', samples: s.samples, buffers: new Map(), keys: [], ready: false,
+    return { vib: s.vib || 0, bite: s.bite || 0, chTrem, modKnob: s.modKnob || null, modLPs, modRange: s.modRange || [300, 1000], modReso: s.modReso || 0, modMk: s.modMk || [0, 0], modTrim, dbgTail, chEQ, chHP, chHS, chSend, revSend, fxo: { cutoff: 20000, reso: 0, env: 0, glide: 0 }, polyG, alive: 0, held: 0, vox: [], inp, modLP, modHS, modAir, modSweep, modLS, mod: s.mod || 'vibrato', analog: !!s.analog, id: s.id, name: s.name, cat: s.cat || '', samples: s.samples, buffers: new Map(), keys: [], ready: false,
              vol: store.get('vol.' + s.id, 1), mute: false, solo: false, out,
              trim: s.trim || 1, human: !!s.human, velDeep: !!s.velDeep, drift: !!s.drift, fat: !!s.fat, loop: s.loop || null, fatPan: s.fatPan || 0, fatSpread: s.fatSpread || 0, fatOffset: !!s.fatOffset, tame: !!s.tame, rel: s.rel || 0.09, loops: new Map(),
              env0: { a: 0, d: 0.5, s: 1, r: +((s.rel || 0.09) * 4).toFixed(2) } };
@@ -692,6 +695,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
 
   function noteOn(src, note, vel) {
     unlock();
+    const glideFrom = lastGlideNote; lastGlideNote = note;
     const prev = active.get(src);
     if (prev && !prev.up) noteOff(src);
     const t = ctx.currentTime;
@@ -710,6 +714,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
       s.buffer = ch.buffers.get(k);
       s.playbackRate.value = Math.pow(2, (note - k) / 12);
       s.detune.value = bendVal * 200 + dOff * (hv ? hv.spread : 8) + (hv ? hv.detune : 0) + ((ch.analog || ch.drift) ? (Math.random() * 2 - 1) * 3 : 0);
+      { const gs = glideSecs(Math.max(fx.glide, ch.fxo.glide)); if (gs > 0 && glideFrom !== null && glideFrom !== note) { const d0 = s.detune.value; s.detune.setValueAtTime(d0 + (glideFrom - note) * 100, t); s.detune.linearRampToValueAtTime(d0, t + gs); } }
       let vg = null;
       if (ch.mod === 'vibrato') { if (ch.vib) { vg = ctx.createGain(); vg.gain.value = ch.vib / 45; modGain.connect(vg); vg.connect(s.detune); } else modGain.connect(s.detune); }
       if (ch.analog || ch.drift) driftGain.connect(s.detune);
@@ -1218,10 +1223,10 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
       apply: (i, n) => eq[i].gain.setTargetAtTime((n - 0.5) * 48, ctx.currentTime, 0.02)
     },
     fx: {
-      names: ['Cutoff', 'Reso', 'Fltr Env', 'Tremolo', 'Verb'],
+      names: ['Cutoff', 'Reso', 'Fltr Env', 'Glide', 'Verb'],
       def: [0.5, 0, 0, 0, 0],
       snapFn: i => i === 0 ? 0.5 : undefined,
-      fmt: (i, n) => i === 0 ? (n < 0.495 ? 'LP ' + fmtHz(cutoffHz(n * 2)) : n > 0.505 ? 'Highs +' + Math.round((n - 0.5) * 36) + ' dB' : 'Open') : pct(n),
+      fmt: (i, n) => i === 0 ? (n < 0.495 ? 'LP ' + fmtHz(cutoffHz(n * 2)) : n > 0.505 ? 'Highs +' + Math.round((n - 0.5) * 36) + ' dB' : 'Open') : i === 3 ? (n < 0.02 ? 'Off' : Math.round(glideSecs(n) * 1000) + ' ms') : pct(n),
       apply: (i, n) => {
         if (i === 0) {
           const T = ctx.currentTime, r = Math.max(0, (n - 0.5) * 2);
@@ -1237,7 +1242,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
         }
         else if (i === 1) { fx.reso = n; updateFilters(); }
         else if (i === 2) fx.env = n;
-        else if (i === 3) gTrem.setDepth(n);
+        else if (i === 3) fx.glide = n;
         else revSendG.gain.setTargetAtTime(n * 0.9, ctx.currentTime, 0.03);
       }
     }
@@ -1256,6 +1261,8 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
   if (!store.get('eqv2', false)) { MODES.eq.val = [0.5, 0.5, 0.5, 0.5, 0.5]; store.set('knobs.eq', MODES.eq.val); store.set('eqv2', true); }
   // One-time: the old Chorus amount must not turn into Tremolo depth.
   if (!store.get('tremv1', false)) { MODES.fx.val[3] = 0; store.set('knobs.fx', MODES.fx.val); store.set('tremv1', true); }
+  // One-time: the old Tremolo amount must not turn into Glide time.
+  if (!store.get('glidev1', false)) { MODES.fx.val[3] = 0; store.set('knobs.fx', MODES.fx.val); store.set('glidev1', true); }
   // Apply saved EQ and FX settings to the sound right away.
   for (const key of ['eq', 'fx']) MODES[key].val.forEach((n, i) => MODES[key].apply(i, n));
 
@@ -1265,9 +1272,9 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
     c.fxs = { eq: store.get('sfx.' + c.id + '.eq', [0.5, 0.5, 0.5, 0.5, 0.5]).slice(0, 5), fx: store.get('sfx.' + c.id + '.fx', [0.5, 0, 0, 0, 0]).slice(0, 5) };
     while (c.fxs.eq.length < 5) c.fxs.eq.push(0.5);
     while (c.fxs.fx.length < 5) c.fxs.fx.push(0);
-    if (!store.get('tremv1c', false)) c.fxs.fx[3] = 0;
+    if (!store.get('tremv1c', false) || !store.get('glidev1c', false)) c.fxs.fx[3] = 0;
   }
-  store.set('tremv1c', true);
+  store.set('tremv1c', true); store.set('glidev1c', true);
   function applySound(c, key, i, n) {
     const T = ctx.currentTime;
     if (key === 'eq') { c.chEQ[i].gain.setTargetAtTime((n - 0.5) * 48, T, 0.02); return; }
@@ -1279,7 +1286,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
     }
     else if (i === 1) { c.fxo.reso = n; updateFilters(); }
     else if (i === 2) c.fxo.env = n;
-    else if (i === 3) c.chTrem.setDepth(n);
+    else if (i === 3) c.fxo.glide = n;
     else c.revSend.gain.setTargetAtTime(n * 0.9 * 0.8, T, 0.03);
   }
   for (const c of channels) for (const key of ['eq', 'fx']) c.fxs[key].forEach((n, i) => applySound(c, key, i, n));
@@ -1314,7 +1321,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
     auxNames.push(name);
     auxKnobs.push(makeKnob(kn, { label: 'Knob ' + (i + 1),
       longPress: () => {
-        if (!(mode === 'fx' && i === 3)) return false;
+        if (true) return false;
         tremEdit = tremEdit === 'depth' ? 'rate' : tremEdit === 'rate' ? 'power' : 'depth';
         auxKnobs[3].set(tremEdit === 'rate' ? tremRateN : tremEdit === 'power' ? tremPowN : curVals('fx')[3]);
         auxNames[3].textContent = tremLabel[tremEdit];
