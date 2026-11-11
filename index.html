@@ -755,6 +755,8 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
       // other. Identical copies add up on the attack and then drift in and out of phase, which is what makes a pad "dip".
       s.start(t, (ch.fatOffset && dOff > 0 && lp) ? lp.start + 0.15 + Math.random() * Math.max(0.1, lp.end - lp.start - 0.4) : 0);
       parts.push({ s, g, f, ch });
+      ch.live = (ch.live || 0) + 1;
+      s.addEventListener('ended', () => { ch.live = Math.max(0, ch.live - 1); });
       if (ch.polyG) {
         ch.alive++; ch.held++; polyUpdate(ch);
         s.addEventListener('ended', () => { ch.alive = Math.max(0, ch.alive - 1); polyUpdate(ch); });
@@ -849,7 +851,10 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
     for (const c of channels) if (c.off) { c.mute = true; c.solo = false; }
     const anySolo = channels.some(c => c.solo);
     for (const c of channels) {
-      const audible = !c.mute && (!anySolo || c.solo);
+      if (!c.mute) c.cut = false;
+      // Switching sounds never cuts the old one off: notes it is already playing keep ringing (or held) and only new notes go to the new sound.
+      // Only the M button cuts a sound straight away.
+      const audible = (!c.mute && (!anySolo || c.solo)) || ((c.live || 0) > 0 && !c.cut);
       c.out.gain.setTargetAtTime(audible ? c.vol * c.trim : 0, ctx.currentTime, 0.015);
     }
     refreshUI();
@@ -1495,7 +1500,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
       });
       bm.addEventListener('click', () => {
         if (single) return;
-        c.mute = !c.mute; if (c.mute) c.solo = false;
+        c.mute = !c.mute; if (c.mute) { c.solo = false; c.cut = true; }
         saveOn(); applyMix();
       });
     } else { bs.disabled = bm.disabled = true; }
@@ -2267,7 +2272,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
 /* Auto-update: the website checks for a newer version every 15 s and reloads itself
    when nothing is being played. Settings are saved, so nothing is lost. */
 (() => {
-  const BUILD = '1794359075';
+  const BUILD = '1794359520';
   if (!/^https?:$/.test(location.protocol)) return;
   async function check() {
     try {
