@@ -2296,7 +2296,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
 /* Share link icon in Perform > Edit (adds a copy-link button to each set list) */
 (function(){
   var SB='https://qfwfwypkpzonsajhxeaz.supabase.co', KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFmd2Z3eXBrcHpvbnNhamh4ZWF6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQzNTcyMDcsImV4cCI6MjEwOTkzMzIwN30.BK-vOd5VQ5eEi3qOZ6PnoYVbIPd4f_spE7OkECG9TIA', SITE=location.origin + '/purplesoundbank/site/';
-  function token(){ try{ for(var i=0;i<localStorage.length;i++){ var k=localStorage.key(i); if(/^sb-.*-auth-token$/.test(k)){ var v=JSON.parse(localStorage.getItem(k)); if(v&&v.access_token) return v.access_token; } } }catch(e){} return null; }
+  function token(){ try{ for(var i=0;i<localStorage.length;i++){ var k=localStorage.key(i); if(/^sb-.*-auth-token$/.test(k)){ var v=JSON.parse(localStorage.getItem(k)); if(v&&v.access_token){ if(v.expires_at && v.expires_at*1000 < Date.now()+30000 && v.refresh_token){ return fetch(SB+'/auth/v1/token?grant_type=refresh_token',{method:'POST',headers:{'apikey':KEY,'Content-Type':'application/json'},body:JSON.stringify({refresh_token:v.refresh_token})}).then(function(r){ if(!r.ok) throw 0; return r.json(); }).then(function(n){ n.expires_at=Math.floor(Date.now()/1000)+(n.expires_in||3600); try{ localStorage.setItem(k,JSON.stringify(n)); }catch(e){} return n.access_token; }).catch(function(){ return null; }); } return Promise.resolve(v.access_token); } } } }catch(e){} return Promise.resolve(null); }
   function flash(b,t){ b.textContent=t; setTimeout(function(){ b.textContent='\uD83D\uDD17'; },1600); }
   function add(){
     document.querySelectorAll('.song .ed').forEach(function(ed){
@@ -2307,13 +2307,13 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
         var row=ed.closest('.song'), idx=(+row.querySelector('.no').textContent)-1, songs=[];
         try{ songs=JSON.parse(localStorage.getItem('psb.songs')||'[]'); }catch(x){}
         var s=songs[idx]; if(!s){ flash(b,'!'); return; }
-        var t=token(); if(!t){ window.open(SITE+'#/login','_blank'); flash(b,'login'); return; }
-        fetch(SB+'/rest/v1/rpc/create_share',{method:'POST',headers:{'apikey':KEY,'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({n:s.name||'Song',s:s})})
+        token().then(function(t){ if(!t){ window.open(SITE+'#/login','_blank'); flash(b,'login'); return; }
+        return fetch(SB+'/rest/v1/rpc/create_share',{method:'POST',headers:{'apikey':KEY,'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({n:s.name||'Song',s:s})})
           .then(function(r){ if(!r.ok) throw new Error(r.status); return r.json(); })
           .then(function(code){ var u=SITE+'#/s/'+code; var done=function(){ flash(b,'\u2713'); };
             if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(u).then(done,function(){ prompt('Copy this link',u); }); }
             else { prompt('Copy this link',u); } })
-          .catch(function(){ window.open(SITE+'#/login','_blank'); flash(b,'login'); });
+          .catch(function(){ window.open(SITE+'#/login','_blank'); flash(b,'login'); }); });
       });
       ed.insertBefore(b, ed.firstChild);
     });
@@ -2324,16 +2324,16 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
 <script>
 (function(){
   var SB='https://qfwfwypkpzonsajhxeaz.supabase.co', KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFmd2Z3eXBrcHpvbnNhamh4ZWF6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQzNTcyMDcsImV4cCI6MjEwOTkzMzIwN30.BK-vOd5VQ5eEi3qOZ6PnoYVbIPd4f_spE7OkECG9TIA', SITE=location.origin + '/purplesoundbank/site/', b=document.getElementById('copyurl'); if(!b) return;
-  function token(){ try{ for(var i=0;i<localStorage.length;i++){ var k=localStorage.key(i); if(/^sb-.*-auth-token$/.test(k)){ var v=JSON.parse(localStorage.getItem(k)); if(v&&v.access_token) return v.access_token; } } }catch(e){} return null; }
+  function token(){ try{ for(var i=0;i<localStorage.length;i++){ var k=localStorage.key(i); if(/^sb-.*-auth-token$/.test(k)){ var v=JSON.parse(localStorage.getItem(k)); if(v&&v.access_token){ if(v.expires_at && v.expires_at*1000 < Date.now()+30000 && v.refresh_token){ return fetch(SB+'/auth/v1/token?grant_type=refresh_token',{method:'POST',headers:{'apikey':KEY,'Content-Type':'application/json'},body:JSON.stringify({refresh_token:v.refresh_token})}).then(function(r){ if(!r.ok) throw 0; return r.json(); }).then(function(n){ n.expires_at=Math.floor(Date.now()/1000)+(n.expires_in||3600); try{ localStorage.setItem(k,JSON.stringify(n)); }catch(e){} return n.access_token; }).catch(function(){ return null; }); } return Promise.resolve(v.access_token); } } } }catch(e){} return Promise.resolve(null); }
   function flash(t){ b.textContent=t; setTimeout(function(){ b.textContent='Copy link'; },1800); }
   b.addEventListener('click',function(){
     var songs=[],cur=null; try{ songs=JSON.parse(localStorage.getItem('psb.songs')||'[]'); cur=JSON.parse(localStorage.getItem('psb.curSong')); }catch(x){}
     var s=songs.filter(function(x){return x.id===cur;})[0]; if(!s){ flash('Select a song first'); return; }
-    var t=token(); if(!t){ window.open(SITE+'#/login','_blank'); flash('Log in first'); return; }
-    fetch(SB+'/rest/v1/rpc/create_share',{method:'POST',headers:{'apikey':KEY,'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({n:s.name||'Song',s:s})})
+    token().then(function(t){ if(!t){ window.open(SITE+'#/login','_blank'); flash('Log in first'); return; }
+    return fetch(SB+'/rest/v1/rpc/create_share',{method:'POST',headers:{'apikey':KEY,'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({n:s.name||'Song',s:s})})
       .then(function(r){ if(!r.ok) throw new Error(r.status); return r.json(); })
       .then(function(code){ var u=SITE+'#/s/'+code; if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(u).then(function(){ flash('Link copied \u2713'); },function(){ prompt('Copy this link',u); }); } else { prompt('Copy this link',u); } })
-      .catch(function(){ window.open(SITE+'#/login','_blank'); flash('Log in first'); });
+      .catch(function(){ window.open(SITE+'#/login','_blank'); flash('Log in first'); }); });
   });
 })();
 </script>
