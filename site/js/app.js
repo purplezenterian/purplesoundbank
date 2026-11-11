@@ -159,8 +159,15 @@
       api.onRecovery(() => A.routes._recovery());
       const fromEmail = /access_token=|type=signup|type=recovery|error_description=/.test(location.hash);
       if (fromEmail) { await new Promise(r => setTimeout(r, 400)); history.replaceState(null, '', location.pathname + '#/pricing'); }
-      await refreshState();
-    } catch (e) { A.render(h('div', { class: 'card narrow' }, h('h2', null, 'Could not start'), h('p', { class: 'msg err' }, e.message))); return; }
+      try { await refreshState(); }
+      catch (e1) {
+        // A stale or rotated login (for example from another tab) must never block the site: clear it and carry on signed out.
+        try { await api.signOut(); } catch (x) {}
+        try { Object.keys(localStorage).filter(k => /^sb-.*-auth-token$/.test(k)).forEach(k => localStorage.removeItem(k)); } catch (x) {}
+        S.session = S.profile = S.sub = null; S.blocker = null;
+        await refreshState();
+      }
+    } catch (e) { A.render(h('div', { class: 'card narrow' }, h('h2', null, 'Could not start'), h('p', { class: 'msg err' }, e.message), h('button', { class: 'btn', onclick: () => { try { Object.keys(localStorage).filter(k => /^sb-.*-auth-token$/.test(k)).forEach(k => localStorage.removeItem(k)); } catch (x) {} location.reload(); } }, 'Clear and retry'))); return; }
     demoBar(); window.addEventListener('hashchange', route); route();
     setInterval(heartbeat, 30000); setInterval(refreshCounts, 15000);
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') heartbeat(); });
