@@ -11,6 +11,7 @@
     const cta = S.session ? h('a', { class: 'btn primary big', href: '#/pricing' }, 'Start your free month') : h('a', { class: 'btn primary big', href: '#/signup' }, 'Start your free month');
     A.render(
       h('section', { class: 'hero-brand' }, h('span', { class: 'mark big' }, h('i'), h('i'), h('i')), h('span', { class: 'name' }, C.siteName)),
+      h('section', { class: 'section' }, h('div', { class: 'card glow mid center' }, h('h2', { style: 'margin:0 0 8px' }, 'New sounds and performances added every month'), h('p', { class: 'muted', style: 'margin:0' }, 'Everything is updated every month too, and it is all included in your membership.'))),
       pricingCard(true),
       h('section', { class: 'section mid' }, h('h2', { class: 'center' }, 'Questions'), faq()));
   };
