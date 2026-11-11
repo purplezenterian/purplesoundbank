@@ -154,17 +154,17 @@
     A.setTitle('Play');
     const bar = h('div', { class: 'loadbar' }, h('i')); const status = h('p', { class: 'muted center' }, 'Preparing your instrument…');
     A.render(h('div', { class: 'card narrow center' }, h('h2', null, 'Opening the instrument'), status, bar, h('p', { class: 'small muted' }, 'Tip: use Chrome or Edge to play with a MIDI keyboard.')));
-    let url = await api.instrumentUrl(), src = url, blobUrl = null;
+    let url = await api.instrumentUrl(), src = url, srcdoc = null, blobUrl = null;
     if (C.mode !== 'mock') {
       const res = await fetch(url); if (!res.ok) throw new Error('Could not load the instrument (' + res.status + ')');
       const total = +res.headers.get('content-length') || 0, rd = res.body.getReader(), parts = []; let got = 0;
       for (;;) { const { done, value } = await rd.read(); if (done) break; parts.push(value); got += value.length; if (total) bar.firstChild.style.width = Math.round(got / total * 100) + '%'; status.textContent = 'Loading sounds… ' + (got / 1048576).toFixed(1) + ' MB'; }
-      blobUrl = URL.createObjectURL(new Blob(parts, { type: 'text/html' })); src = blobUrl;
+      srcdoc = await new Blob(parts, { type: 'text/html' }).text(); src = null;
     }
     document.body.classList.add('playing');
     const wrap = h('div', { class: 'play-wrap' }, h('div', { class: 'play-bar' }, h('b', null, C.siteName), h('span', { class: 'muted grow' }, 'One device at a time: signing in elsewhere will end this session.'),
       h('a', { class: 'btn small', href: '#/hub' }, 'Hub'), h('button', { class: 'btn small', onclick: () => leave('#/account') }, 'Account')),
-      h('iframe', { src, title: 'Purple SoundBank', allow: 'midi; autoplay; fullscreen; microphone', allowfullscreen: 'true' }));
+      h('iframe', Object.assign(srcdoc !== null ? { srcdoc } : { src }, { title: 'Purple SoundBank', allow: 'midi; autoplay; fullscreen; microphone', allowfullscreen: 'true' })));
     const leave = to => { cleanup(); A.go(to); };
     const cleanup = () => { wrap.remove(); document.body.classList.remove('playing'); if (blobUrl) URL.revokeObjectURL(blobUrl); window.removeEventListener('hashchange', cleanup); };
     window.addEventListener('hashchange', cleanup);
