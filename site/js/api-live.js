@@ -150,6 +150,8 @@
     async markRead(userId) { const u = await me(); await sb.from('messages').update({ read_at: new Date().toISOString() }).eq('recipient_id', u).eq('sender_id', userId).is('read_at', null); },
     async createShare(name, song) { return q(sb.rpc('create_share', { n: name, s: song })); },
     async getShare(code) { return q(sb.rpc('get_share', { c: code })); },
+    async setNamedSetlist(n, txt) { await q(sb.rpc('set_named_setlist', { n, v: txt })); },
+    async getNamedSetlist(n) { try { return unwrap(await sb.rpc('get_named_setlist', { n })); } catch (e) { return null; } },
     async counts() {
       const u = await me();
       const [a, b] = await Promise.all([

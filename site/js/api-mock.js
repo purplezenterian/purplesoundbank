@@ -220,6 +220,8 @@
     async markRead(userId) { needMember(); const m = me(); S.messages.forEach(x => { if (x.recipient_id === m.id && x.sender_id === userId && !x.read_at) x.read_at = iso(now()); }); save(); },
     async createShare() { throw err('Not available in demo mode'); },
     async getShare() { return null; },
+    async setNamedSetlist() {},
+    async getNamedSetlist() { return null; },
     async counts() { needMember(); botTick(); const m = me(); return { unread: S.messages.filter(x => x.recipient_id === m.id && !x.read_at).length, requests: S.friendships.filter(f => f.status === 'pending' && f.addressee_id === m.id).length }; },
 
     // ---- admin

@@ -163,11 +163,11 @@
       for (;;) { const { done, value } = await rd.read(); if (done) break; parts.push(value); got += value.length; if (total) bar.firstChild.style.width = Math.round(got / total * 100) + '%'; status.textContent = 'Loading sounds… ' + (got / 1048576).toFixed(1) + ' MB'; }
       srcdoc = await new Blob(parts, { type: 'text/html' }).text(); src = null;
     }
-    try { const sl = await api.getSetlist(); if (sl && sl.data && localStorage.getItem('site.setv') !== String(sl.v)) { Object.keys(sl.data).forEach(k => { if (!k.startsWith('psb.')) return;
+    try { const sl = await api.getSetlist(); if (sl && sl.data && localStorage.getItem('site.setv') !== String(sl.v)) { Object.keys(sl.data).forEach(k => { if (!k.startsWith('psb.') || k === 'psb.did') return;
         if (k === 'psb.songs') { let mine = []; try { mine = JSON.parse(localStorage.getItem('psb.songs') || '[]'); } catch (x) {} let pub = []; try { pub = JSON.parse(sl.data[k]); } catch (x) {} const ids = new Set(pub.map(x => x.id)); localStorage.setItem(k, JSON.stringify(pub.concat(mine.filter(x => !ids.has(x.id))))); }
         else if (k === 'psb.curSong') { if (!A.autoSong) localStorage.setItem(k, sl.data[k]); }
         else localStorage.setItem(k, sl.data[k]); }); localStorage.setItem('site.setv', String(sl.v)); } } catch (e) {}
-    try { const d = window.PSB_DEFAULTS || {}; Object.keys(d).forEach(k => { localStorage.setItem(k, d[k]); }); } catch (e) {}
+    try { const d = A.ownerVersion ? (A.ownerVersion = false, {}) : (window.PSB_DEFAULTS || {}); Object.keys(d).forEach(k => { localStorage.setItem(k, d[k]); }); } catch (e) {}
     let firstRun = false;
     try { const ALL = ["purplegrand","purpleep2","polypad","multistrings","dminus22","zdkstrings","synbrass2","80spopbrass"]; const cur = localStorage.getItem('psb.off'); let arr = null; try { arr = JSON.parse(cur); } catch (x) {}
       firstRun = !A.autoSong && (cur === null || (Array.isArray(arr) && ALL.every(id => arr.includes(id))));
@@ -188,10 +188,10 @@
   /* ---------- one-tap export of this browser's instrument settings ---------- */
   R.export = async () => {
     A.setTitle('Export');
-    const o = {}; for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k.startsWith('psb.')) o[k] = localStorage.getItem(k); }
+    const o = {}; for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k.startsWith('psb.') && k !== 'psb.did') o[k] = localStorage.getItem(k); }
     const txt = JSON.stringify(o), ta = h('textarea', { rows: 8, style: 'width:100%' }); ta.value = txt;
     A.render(h('div', { class: 'card narrow center' }, h('h2', null, 'Your saved songs'), h('p', { class: 'muted' }, Object.keys(o).length + ' items found'),
-      h('button', { class: 'btn', onclick: async () => { ta.select(); try { await navigator.clipboard.writeText(txt); } catch (e) { document.execCommand('copy'); } A.toast && A.toast('Copied'); } }, 'Copy'), (A.state && A.state.profile && A.state.profile.is_admin) || true ? h('button', { class: 'btn primary', style: 'margin-left:8px', onclick: async () => { try { await api.setSetlist(txt); alert('Published. Members get it next time they press Play.'); } catch (e) { A.fail(e); } } }, 'Publish to members') : null, ta));
+      h('button', { class: 'btn', onclick: async () => { ta.select(); try { await navigator.clipboard.writeText(txt); } catch (e) { document.execCommand('copy'); } A.toast && A.toast('Copied'); } }, 'Copy'), (A.state && A.state.profile && A.state.profile.is_admin) || true ? h('button', { class: 'btn primary', style: 'margin-left:8px', onclick: async () => { try { await api.setSetlist(txt); alert('Published. Members get it next time they press Play.'); } catch (e) { A.fail(e); } } }, 'Publish to members') : null, h('button', { class: 'btn', style: 'margin-left:8px', onclick: async () => { try { await api.setNamedSetlist('jedzenti', txt); alert('Published as the JEDZENTI version.'); } catch (e) { A.fail(e); } } }, 'Publish as JEDZENTI version'), ta));
   };
 
   /* ---------- shareable set list links ---------- */
@@ -211,6 +211,17 @@
     const songs = readSongs().filter(x => x.id !== r.song.id); songs.push(r.song);
     localStorage.setItem('psb.songs', JSON.stringify(songs)); localStorage.setItem('psb.curSong', JSON.stringify(r.song.id));
     A.autoSong = true; A.go('#/play');
+  };
+
+  R.jedzenti = async () => {
+    const sl = await api.getNamedSetlist('jedzenti');
+    if (!sl) { A.toast('That version is not published yet'); return A.go('#/hub'); }
+    let mine = []; try { mine = JSON.parse(localStorage.getItem('psb.songs') || '[]'); } catch (x) {}
+    let pub = []; try { pub = JSON.parse(sl['psb.songs'] || '[]'); } catch (x) {}
+    const ids = new Set(pub.map(x => x.id));
+    Object.keys(sl).forEach(k => { if (!k.startsWith('psb.') || k === 'psb.did') return; localStorage.setItem(k, sl[k]); });
+    localStorage.setItem('psb.songs', JSON.stringify(pub.concat(mine.filter(x => !ids.has(x.id)))));
+    A.ownerVersion = true; A.autoSong = true; A.go('#/play');
   };
 
   /* ---------- admin ---------- */
