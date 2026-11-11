@@ -54,7 +54,8 @@
     const s = await api.getSession();
     S.session = s; S.blocker = null;
     if (!s) { S.profile = null; S.sub = null; S.counts = { unread: 0, requests: 0 }; return; }
-    const r = await api.registerDevice(false);
+    let r = await api.registerDevice(false);
+    if (r.status === 'busy') { try { const pr = await api.me(); if (pr && pr.is_admin) r = await api.registerDevice(true); } catch (e) {} }
     if (r.status === 'busy') S.blocker = { type: 'busy', label: r.label };
     else if (r.status === 'device_taken') S.blocker = { type: 'taken' };
     else if (r.status === 'too_many_devices') S.blocker = { type: 'toomany' };
