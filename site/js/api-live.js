@@ -148,6 +148,8 @@
     },
     async sendMessage(userId, body) { const u = await me(); body = String(body || '').trim(); if (!body) return; const { error } = await sb.from('messages').insert({ sender_id: u, recipient_id: userId, body: body.slice(0, 2000) }); if (error) throw err(/row-level/i.test(error.message) ? 'You can only message friends you have not blocked.' : error.message); return true; },
     async markRead(userId) { const u = await me(); await sb.from('messages').update({ read_at: new Date().toISOString() }).eq('recipient_id', u).eq('sender_id', userId).is('read_at', null); },
+    async createShare(name, song) { return q(sb.rpc('create_share', { n: name, s: song })); },
+    async getShare(code) { return q(sb.rpc('get_share', { c: code })); },
     async counts() {
       const u = await me();
       const [a, b] = await Promise.all([

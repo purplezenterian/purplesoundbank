@@ -23,7 +23,7 @@
     A.setTitle('Hub');
     const cat = A.query.get('c') || 'all';
     const list = h('div'); const moreWrap = h('div', { class: 'center' });
-    A.render(h('div', { class: 'row', style: 'justify-content:space-between;margin-bottom:12px' }, h('h1', { style: 'font-size:30px;margin:0' }, 'The hub'), h('span', null, h('a', { class: 'btn', href: '#/play', style: 'margin-right:8px' }, 'Open the instrument'), h('a', { class: 'btn primary', href: '#/hub/new' }, 'New post'))),
+    A.render(h('div', { class: 'row', style: 'justify-content:space-between;margin-bottom:12px' }, h('h1', { style: 'font-size:30px;margin:0' }, 'The hub'), h('span', null, h('a', { class: 'btn', href: '#/play', style: 'margin-right:8px' }, 'Open the instrument'), h('a', { class: 'btn', href: '#/mysongs', style: 'margin-right:8px' }, 'My set lists'), h('a', { class: 'btn primary', href: '#/hub/new' }, 'New post'))),
       h('div', { class: 'tabs', role: 'tablist' }, CATS.map(c => h('a', { class: 'tab' + (c[0] === cat ? ' on' : ''), href: '#/hub' + (c[0] === 'all' ? '' : '?c=' + c[0]), role: 'tab' }, c[1]))), list, moreWrap);
     let before = null;
     const load = async () => {
@@ -173,6 +173,7 @@
     const cleanup = () => { wrap.remove(); document.body.classList.remove('playing'); if (blobUrl) URL.revokeObjectURL(blobUrl); window.removeEventListener('hashchange', cleanup); };
     window.addEventListener('hashchange', cleanup);
     document.body.append(wrap);
+    if (A.autoSong) { A.autoSong = false; let tries = 0; const fr = wrap.querySelector('iframe'); const iv = setInterval(() => { try { const d = fr.contentDocument; const pb = d && [...d.querySelectorAll('button')].find(b => b.textContent.trim() === 'Perform'); if (pb) pb.click(); const row = d && d.querySelector('.song.on'); if (row) { row.click(); clearInterval(iv); } } catch (e) {} if (++tries > 40) clearInterval(iv); }, 500); }
   };
 
   /* ---------- one-tap export of this browser's instrument settings ---------- */
@@ -182,6 +183,25 @@
     const txt = JSON.stringify(o), ta = h('textarea', { rows: 8, style: 'width:100%' }); ta.value = txt;
     A.render(h('div', { class: 'card narrow center' }, h('h2', null, 'Your saved songs'), h('p', { class: 'muted' }, Object.keys(o).length + ' items found'),
       h('button', { class: 'btn', onclick: async () => { ta.select(); try { await navigator.clipboard.writeText(txt); } catch (e) { document.execCommand('copy'); } A.toast && A.toast('Copied'); } }, 'Copy'), (A.state && A.state.profile && A.state.profile.is_admin) || true ? h('button', { class: 'btn primary', style: 'margin-left:8px', onclick: async () => { try { await api.setSetlist(txt); alert('Published. Members get it next time they press Play.'); } catch (e) { A.fail(e); } } }, 'Publish to members') : null, ta));
+  };
+
+  /* ---------- shareable set list links ---------- */
+  const readSongs = () => { try { return JSON.parse(localStorage.getItem('psb.songs') || '[]'); } catch (e) { return []; } };
+  R.mysongs = async () => {
+    A.setTitle('My set lists');
+    const songs = readSongs();
+    A.render(h('h1', { style: 'font-size:30px' }, 'My set lists'),
+      h('p', { class: 'muted' }, 'Copy a link to any set list, paste it in the hub, and anyone who opens it gets that exact patch. Save songs in the instrument first (Perform, then Save as).'),
+      songs.length ? songs.map(s => h('div', { class: 'card list-row', style: 'margin-bottom:10px' }, h('div', { class: 'grow' }, h('b', null, s.name || 'Untitled')),
+        h('button', { class: 'btn small primary', onclick: async e => { const b = e.target; b.disabled = true; try { const code = await api.createShare(s.name || 'Song', s); const url = location.origin + location.pathname + '#/s/' + code; try { await navigator.clipboard.writeText(url); A.toast('Link copied. Paste it in the hub.'); } catch (x) { prompt('Copy this link', url); } } catch (er) { A.fail(er); } finally { b.disabled = false; } } }, 'Copy link')))
+      : h('div', { class: 'empty' }, 'No saved songs on this device yet. Open the instrument, go to Perform and save one.'));
+  };
+  R.s = async segs => {
+    const r = await api.getShare(segs[0]);
+    if (!r || !r.song) { A.toast('That link is not valid'); return A.go('#/hub'); }
+    const songs = readSongs().filter(x => x.id !== r.song.id); songs.push(r.song);
+    localStorage.setItem('psb.songs', JSON.stringify(songs)); localStorage.setItem('psb.curSong', JSON.stringify(r.song.id));
+    A.autoSong = true; A.go('#/play');
   };
 
   /* ---------- admin ---------- */
