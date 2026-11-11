@@ -40,7 +40,7 @@
   const err = (m, code) => { const e = new Error(m); e.code = code || 'error'; return e; };
   const me = () => (S.current ? S.users.find(u => u.id === S.current.userId) : null);
   const acct = id => S.accounts.find(a => a.id === id);
-  const pub = u => u && ({ id: u.id, username: u.username, display_name: u.display_name || u.username, bio: u.bio || '', avatar_color: u.avatar_color, created_at: u.created_at });
+  const pub = u => u && ({ id: u.id, username: u.username, display_name: u.display_name || u.username, bio: u.bio || '', avatar_color: u.avatar_color, created_at: u.created_at, is_admin: !!u.is_admin });
   const byId = id => S.users.find(u => u.id === id);
   const isMember = () => {
     if (!S.current) return false;

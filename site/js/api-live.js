@@ -26,7 +26,7 @@
   }
 
   const AUTHOR = 'author:profiles!posts_author_id_fkey(id,username,display_name,avatar_color,bio,created_at)';
-  const prof = 'id,username,display_name,bio,avatar_color,created_at';
+  const prof = 'id,username,display_name,bio,avatar_color,created_at,is_admin';
   const me = async () => { await token(); return session ? session.user.id : null; };
   const mapErr = e => { if (e && e.message && /row-level security|permission denied/i.test(e.message)) return err('That is not available right now. If you were signed in elsewhere, please refresh.', 'no_access'); return e; };
   async function q(p) { try { return unwrap(await p); } catch (e) { throw mapErr(e); } }
@@ -74,7 +74,7 @@
     async openPortal() { const d = await fnOrThrow('billing-portal'); return { url: d.url }; },
     async instrumentUrl() { const d = await fnOrThrow('get-instrument', { deviceId: await PSB_DEVICE.deviceId() }); return d.url; },
 
-    async me() { const u = await me(); if (!u) return null; return q(sb.from('profiles').select(prof + ',is_admin,trial_used').eq('id', u).single()); },
+    async me() { const u = await me(); if (!u) return null; return q(sb.from('profiles').select(prof + ',trial_used').eq('id', u).single()); },
     async getProfile(username) { return q(sb.from('profiles').select(prof).eq('username', String(username).toLowerCase()).maybeSingle()); },
     async updateProfile(p) { const u = await me(); const patch = {}; ['display_name', 'bio', 'avatar_color'].forEach(k => { if (p[k] !== undefined) patch[k] = p[k]; }); return q(sb.from('profiles').update(patch).eq('id', u).select(prof).single()); },
 

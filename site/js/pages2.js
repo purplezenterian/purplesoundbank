@@ -9,9 +9,11 @@
   const reportDlg = (type, id) => A.modal(h('div', null, h('h2', null, 'Report'), h('p', { class: 'muted small' }, 'Tell the admins what is wrong. They will take a look.'), A.form([{ name: 'reason', label: 'What is the problem?', type: 'textarea', max: 500 }], 'Send report', async v => { await api.report(type, id, v.reason); A.closeModal(); A.toast('Thanks, the admins will take a look'); })));
 
   /* ---------- hub ---------- */
+  const linkOnly = b => { const m = /^\s*(https?:\/\/\S+)\s*$/.exec(b || ''); if (!m) return null; const base = location.origin + location.pathname; return m[1].startsWith(base) ? { href: m[1].slice(base.length) || '#/', ext: false } : { href: m[1], ext: true }; };
   function postCard(p) {
-    return h('a', { class: 'post' + (p.pinned ? ' pinned' : ''), href: '#/hub/post/' + p.id },
-      h('div', { class: 'meta' }, p.pinned ? h('span', { class: 'pill pin' }, 'Pinned') : null, h('span', { class: 'pill' }, catName(p.category)), h('span', null, p.author.display_name || p.author.username), h('span', null, A.ago(p.created_at))),
+    const lo = linkOnly(p.body);
+    return h('a', Object.assign({ class: 'post' + (p.pinned ? ' pinned' : ''), href: lo ? lo.href : '#/hub/post/' + p.id }, lo && lo.ext ? { target: '_blank', rel: 'noopener noreferrer' } : {}),
+      h('div', { class: 'meta' }, p.pinned ? h('span', { class: 'pill pin' }, 'Pinned') : null, h('span', { class: 'pill' }, catName(p.category)), h('span', null, p.author.display_name || p.author.username, A.badge(p.author)), h('span', null, A.ago(p.created_at))),
       h('h3', null, p.title), h('p', null, p.body),
       h('div', { class: 'meta', style: 'margin-top:8px' }, h('span', null, '♥ ' + p.like_count), h('span', null, '💬 ' + p.comment_count)));
   }
@@ -63,7 +65,7 @@
     const replyTo = c => A.modal(h('div', null, h('h2', null, 'Reply to ' + (c.author.display_name || c.author.username)), h('p', { class: 'muted small body' }, c.body.slice(0, 160)), A.form([{ name: 'body', label: 'Your reply', type: 'textarea', max: 2000 }], 'Reply', async v => { if (!v.body.trim()) throw new Error('Write something first'); await api.addComment(p.id, v.body, c.id); A.closeModal(); draw(); })));
     A.render(h('div', { class: 'mid' }, h('a', { href: '#/hub', class: 'small' }, '← Back to the hub'),
       h('div', { class: 'card', style: 'margin-top:10px' }, h('div', { class: 'meta' }, p.pinned ? h('span', { class: 'pill pin' }, 'Pinned') : null, h('span', { class: 'pill' }, catName(p.category)), A.who(p.author), h('span', null, A.ago(p.created_at))),
-        h('h1', { style: 'font-size:28px;margin:10px 0' }, p.title), h('div', { class: 'body' }, p.body),
+        h('h1', { style: 'font-size:28px;margin:10px 0' }, p.title), (() => { const lo = linkOnly(p.body); return lo ? h('a', Object.assign({ class: 'btn primary', href: lo.href }, lo.ext ? { target: '_blank', rel: 'noopener noreferrer' } : {}), 'Open') : h('div', { class: 'body' }, p.body); })(),
         h('div', { class: 'row', style: 'margin-top:14px' }, likeBtn, !mine ? h('button', { class: 'linkbtn', onclick: () => reportDlg('post', p.id) }, 'Report') : null,
           (mine || isAdmin) ? h('button', { class: 'linkbtn', onclick: () => ask('Delete post?', 'The post and its comments will be removed.', 'Delete', async () => { await api.deletePost(p.id); A.go('#/hub'); }) }, 'Delete') : null,
           isAdmin ? h('button', { class: 'linkbtn', onclick: async () => { await api.pinPost(p.id, !p.pinned); A.route(); } }, p.pinned ? 'Unpin' : 'Pin') : null)),
@@ -162,7 +164,7 @@
       srcdoc = await new Blob(parts, { type: 'text/html' }).text(); src = null;
     }
     try { const sl = await api.getSetlist(); if (sl && sl.data && localStorage.getItem('site.setv') !== String(sl.v)) { Object.keys(sl.data).forEach(k => { if (k.startsWith('psb.')) localStorage.setItem(k, sl.data[k]); }); localStorage.setItem('site.setv', String(sl.v)); } } catch (e) {}
-    try { const d = window.PSB_DEFAULTS || {}; Object.keys(d).forEach(k => { if (localStorage.getItem(k) === null) localStorage.setItem(k, d[k]); }); } catch (e) {}
+    try { const d = window.PSB_DEFAULTS || {}; Object.keys(d).forEach(k => { localStorage.setItem(k, d[k]); }); } catch (e) {}
     document.body.classList.add('playing');
     const wrap = h('div', { class: 'play-wrap' }, h('div', { class: 'play-bar' }, h('b', null, C.siteName), h('span', { class: 'muted grow' }, 'One device at a time: signing in elsewhere will end this session.'),
       h('a', { class: 'btn small', href: '#/hub' }, 'Hub'), h('button', { class: 'btn small', onclick: () => leave('#/account') }, 'Account')),
