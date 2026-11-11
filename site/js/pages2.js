@@ -31,7 +31,7 @@
       if (!before) { (r.pinned || []).forEach(p => list.append(postCard(p))); if (!r.posts.length && !(r.pinned || []).length) list.append(h('div', { class: 'empty' }, 'No posts here yet. Be the first!')); }
       r.posts.forEach(p => list.append(postCard(p)));
       if (r.posts.length) before = r.posts[r.posts.length - 1].created_at;
-      moreWrap.replaceChildren(r.more ? h('button', { class: 'btn', onclick: () => load().catch(A.fail) }, 'Load more') : null);
+      moreWrap.replaceChildren(...(r.more ? [h('button', { class: 'btn', onclick: () => load().catch(A.fail) }, 'Load more')] : []));
     };
     await load();
   };
