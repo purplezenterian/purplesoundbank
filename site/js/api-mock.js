@@ -77,7 +77,7 @@
       email = String(email || '').trim().toLowerCase(); username = String(username || '').trim().toLowerCase();
       if (!/^[a-z0-9_]{3,20}$/.test(username)) throw err('Usernames are 3-20 letters, numbers or underscores');
       if (!/^\S+@\S+\.\S+$/.test(email)) throw err('Please enter a valid email address');
-      if ((password || '').length < 8) throw err('Password must be at least 8 characters');
+      if ((password || '').length < 6) throw err('Password must be at least 6 characters');
       if (S.accounts.some(a => a.email === email)) throw err('An account with that email already exists');
       if (S.users.some(u => u.username === username)) throw err('That username is taken');
       const id = uid();

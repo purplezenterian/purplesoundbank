@@ -72,7 +72,7 @@
     const f = A.form([
       { name: 'username', label: 'Username (letters, numbers, underscore)', max: 20, auto: 'username' },
       { name: 'email', label: 'Email', type: 'email', auto: 'email' },
-      { name: 'password', label: 'Password (8+ characters)', type: 'password', auto: 'new-password' },
+      { name: 'password', label: 'Password (6+ characters)', type: 'password', auto: 'new-password' },
     ], 'Create account', async v => {
       if (!document.getElementById('agree').checked) throw new Error('Please tick the box to agree to the terms.');
       const r = await api.signUp(v);
@@ -93,8 +93,8 @@
     A.render(h('div', { class: 'card narrow' }, h('h2', null, 'Reset your password'), f, h('p', { class: 'small center', style: 'margin:16px 0 0' }, h('a', { href: '#/login' }, 'Back to log in'))));
   };
   R._recovery = () => {
-    A.modal(h('div', null, h('h2', null, 'Choose a new password'), A.form([{ name: 'pw', label: 'New password (8+ characters)', type: 'password', auto: 'new-password' }], 'Save password', async v => {
-      if (v.pw.length < 8) throw new Error('Password must be at least 8 characters');
+    A.modal(h('div', null, h('h2', null, 'Choose a new password'), A.form([{ name: 'pw', label: 'New password (6+ characters)', type: 'password', auto: 'new-password' }], 'Save password', async v => {
+      if (v.pw.length < 6) throw new Error('Password must be at least 6 characters');
       await api.updatePassword(v.pw); A.closeModal(); A.toast('Password updated'); })));
   };
 
