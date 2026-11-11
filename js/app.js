@@ -141,6 +141,7 @@
     if (!PUBLIC.has(top) && !S.session) { A.next = raw; return A.go('#/login'); }
     if (S.session && (top === 'login' || top === 'signup')) return A.go(A.isMember() ? '#/hub' : '#/pricing');
     if (!PUBLIC.has(top) && !NEEDS_LOGIN.has(top) && !A.isMember()) return A.go('#/pricing');
+    if (top === '' && S.session && S.profile && S.profile.is_admin && A.isMember()) return A.go('#/play');
     if (top === 'admin' && !(S.profile && S.profile.is_admin)) return A.go('#/');
     const fn = A.routes[top];
     if (!fn) return A.render(h('div', { class: 'empty' }, h('h2', null, 'Page not found'), h('a', { class: 'btn', href: '#/' }, 'Go home')));
