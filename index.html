@@ -693,8 +693,11 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
     };
   }
 
-  function noteOn(src, note, vel) {
+  const monoHeld = [];   // keys held down while a mono sound is on, oldest first (last-note priority)
+  function monoActive() { return channels.some(c => c.monoVoice && c.ready && !c.off && !c.mute); }
+  function noteOn(src, note, vel, monoOnly) {
     unlock();
+    if (!monoOnly && monoActive()) { const mi = monoHeld.findIndex(h => h.src === src); if (mi >= 0) monoHeld.splice(mi, 1); monoHeld.push({ src, note, vel }); }
     const glideFrom = lastGlideNote; lastGlideNote = note;
     const prev = active.get(src);
     if (prev && !prev.up) noteOff(src);
@@ -707,7 +710,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
     const anySoloNow = channels.some(c => c.solo);
     for (const ch of channels) {
       // Sounds that are switched off, muted or not soloed make no voices at all, so they cost nothing.
-      if (!ch.ready || ch.off || ch.mute || (anySoloNow && !ch.solo)) continue;
+      if (!ch.ready || ch.off || ch.mute || (anySoloNow && !ch.solo) || (monoOnly && !ch.monoVoice)) continue;
       const k = nearest(ch.keys, note);
       const layers = ch.fat ? [-1, 1] : [0];   // fat: two copies detuned apart and panned wide
       for (const dOff of layers) {
@@ -844,6 +847,14 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
   }
 
   function noteOff(src) {
+    if (active.has('mono:' + src)) noteOff('mono:' + src);
+    const mi = monoHeld.findIndex(h => h.src === src);
+    if (mi >= 0) {
+      const wasTop = mi === monoHeld.length - 1;
+      monoHeld.splice(mi, 1);
+      // Mono: letting go of the newest key brings back the key still held before it.
+      if (wasTop && monoHeld.length && monoActive()) { const pv = monoHeld[monoHeld.length - 1]; setTimeout(() => { if (monoHeld.includes(pv)) noteOn('mono:' + pv.src, pv.note, pv.vel, true); }, 0); }
+    }
     const v = active.get(src);
     if (!v || v.up) return;
     v.up = true;
@@ -2106,6 +2117,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
     else if (cmd === 0xB0 && d1 === 64) { midiPedal = d2 >= 64; syncPedal(); }
     else if (cmd === 0xB0 && (d1 === 123 || d1 === 120)) {
       for (const id of [...active.keys()]) if (id[0] === 'm') noteOff(id);
+      monoHeld.length = 0;
     }
     else if (cmd === 0xB0 && d1 === 121) { setBend(0); setMod(0); midiPedal = false; syncPedal(); }
   }
