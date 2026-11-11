@@ -173,6 +173,20 @@
     const cleanup = () => { wrap.remove(); document.body.classList.remove('playing'); if (blobUrl) URL.revokeObjectURL(blobUrl); window.removeEventListener('hashchange', cleanup); };
     window.addEventListener('hashchange', cleanup);
     document.body.append(wrap);
+    try { const fr2 = wrap.querySelector('iframe'); const addBtns = () => { try {
+      const d = fr2.contentDocument; if (!d || !d.body || d.__btns) return; const anchor = d.getElementById('saveas'); if (!anchor) return; d.__btns = true;
+      const st = d.createElement('style'); st.textContent = '.mid:not(.isperf) #copyurl, .mid:not(.isperf) #pasteurl { display: none }'; d.head.append(st);
+      const mkBtn = (id, text) => { const b = d.createElement('button'); b.className = 'fbtn'; b.id = id; b.type = 'button'; b.style.gridColumn = '1/-1'; b.textContent = text; return b; };
+      const flash = (b, t, back) => { b.textContent = t; setTimeout(() => b.textContent = back, 1800); };
+      let last = anchor;
+      if (!d.getElementById('copyurl')) { const c = mkBtn('copyurl', 'Copy link'); last.after(c); last = c;
+        c.addEventListener('click', async () => { let songs = [], cur = null; try { songs = JSON.parse(localStorage.getItem('psb.songs') || '[]'); cur = JSON.parse(localStorage.getItem('psb.curSong')); } catch (x) {}
+          const s = songs.find(x => x.id === cur); if (!s) return flash(c, 'Select a song first', 'Copy link');
+          try { const code = await api.createShare(s.name || 'Song', s); const url = location.origin + location.pathname + '#/s/' + code; try { await navigator.clipboard.writeText(url); } catch (x) { prompt('Copy this link', url); } flash(c, 'Link copied \u2713', 'Copy link'); } catch (er) { A.fail(er); } }); }
+      else last = d.getElementById('copyurl');
+      if (!d.getElementById('pasteurl')) { const p = mkBtn('pasteurl', 'Paste link'); last.after(p);
+        p.addEventListener('click', () => { const u = prompt('Paste the set list link here'); if (!u) return; const m = /#\/s\/([A-Za-z0-9]+)/.exec(u); if (!m) return flash(p, 'Not a valid link', 'Paste link'); A.go('#/s/' + m[1]); }); }
+    } catch (e) {} }; fr2.addEventListener('load', () => { addBtns(); setTimeout(addBtns, 800); }); setTimeout(addBtns, 1500); } catch (e) {}
     try { const fr1 = wrap.querySelector('iframe'); const fitIn = () => { try { const d = fr1.contentDocument, w = fr1.contentWindow; if (!d || !d.body) return; d.body.style.zoom = 1; const h = d.documentElement.scrollHeight, vh = w.innerHeight; if (h > vh + 2) d.body.style.zoom = Math.max(0.55, Math.floor(vh / h * 1000) / 1000); } catch (e) {} }; let ft = null; const soon = () => { clearTimeout(ft); ft = setTimeout(fitIn, 80); }; fr1.addEventListener('load', () => { soon(); try { fr1.contentWindow.addEventListener('resize', soon); new MutationObserver(soon).observe(fr1.contentDocument.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] }); } catch (e) {} }); setTimeout(soon, 1500); } catch (e) {}
     { const fr0 = wrap.querySelector('iframe'); const install = () => { try {
       const d = fr0.contentDocument; if (!d || !d.body || d.__shareHook) return; d.__shareHook = true;
