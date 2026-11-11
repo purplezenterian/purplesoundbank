@@ -21,7 +21,7 @@
     A.setTitle('Hub');
     const cat = A.query.get('c') || 'all';
     const list = h('div'); const moreWrap = h('div', { class: 'center' });
-    A.render(h('div', { class: 'row', style: 'justify-content:space-between;margin-bottom:12px' }, h('h1', { style: 'font-size:30px;margin:0' }, 'The hub'), h('a', { class: 'btn primary', href: '#/hub/new' }, 'New post')),
+    A.render(h('div', { class: 'row', style: 'justify-content:space-between;margin-bottom:12px' }, h('h1', { style: 'font-size:30px;margin:0' }, 'The hub'), h('span', null, h('a', { class: 'btn', href: '#/play', style: 'margin-right:8px' }, 'Open the instrument'), h('a', { class: 'btn primary', href: '#/hub/new' }, 'New post'))),
       h('div', { class: 'tabs', role: 'tablist' }, CATS.map(c => h('a', { class: 'tab' + (c[0] === cat ? ' on' : ''), href: '#/hub' + (c[0] === 'all' ? '' : '?c=' + c[0]), role: 'tab' }, c[1]))), list, moreWrap);
     let before = null;
     const load = async () => {

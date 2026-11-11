@@ -83,7 +83,7 @@
     const link = (href, text, key, badge) => h('a', { href, class: here === key ? 'on' : '' }, text, badge ? h('span', { class: 'badge' }, badge) : null);
     let links = [], right = [];
     if (S.session && !S.blocker && A.isMember()) {
-      links = [link('#/play', 'Play', 'play'), link('#/hub', 'Hub', 'hub'), link('#/friends', 'Friends', 'friends', S.counts.requests || ''), link('#/messages', 'Messages', 'messages', S.counts.unread || ''),
+      links = [link('#/hub', 'Hub', 'hub'),
         S.profile && S.profile.is_admin ? link('#/admin', 'Admin', 'admin') : null, link('#/account', 'Account', 'account')];
     } else if (S.session) {
       links = [link('#/pricing', 'Membership', 'pricing'), link('#/account', 'Account', 'account')];
