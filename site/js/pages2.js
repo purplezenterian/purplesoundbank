@@ -173,6 +173,16 @@
     const cleanup = () => { wrap.remove(); document.body.classList.remove('playing'); if (blobUrl) URL.revokeObjectURL(blobUrl); window.removeEventListener('hashchange', cleanup); };
     window.addEventListener('hashchange', cleanup);
     document.body.append(wrap);
+    { const fr0 = wrap.querySelector('iframe'); const install = () => { try {
+      const d = fr0.contentDocument; if (!d || !d.body || d.__shareHook) return; d.__shareHook = true;
+      const add = () => d.querySelectorAll('.song .ed').forEach(ed => { if (ed.querySelector('.sharebtn')) return;
+        const b = d.createElement('span'); b.className = 'sharebtn'; b.textContent = '🔗'; b.title = 'Copy link to this set list';
+        b.addEventListener('click', async e => { e.stopPropagation(); const row = ed.closest('.song'); const idx = (+row.querySelector('.no').textContent) - 1;
+          let songs = []; try { songs = JSON.parse(localStorage.getItem('psb.songs') || '[]'); } catch (x) {} const s = songs[idx]; if (!s) return A.toast('Save the song first');
+          try { const code = await api.createShare(s.name || 'Song', s); const url = location.origin + location.pathname + '#/s/' + code; try { await navigator.clipboard.writeText(url); } catch (x) { const t = d.createElement('textarea'); t.value = url; d.body.append(t); t.select(); d.execCommand('copy'); t.remove(); } b.textContent = '✓'; setTimeout(() => b.textContent = '🔗', 1500); A.toast('Link copied. Paste it in the hub.'); } catch (er) { A.fail(er); } });
+        ed.appendChild(b); });
+      new MutationObserver(add).observe(d.body, { childList: true, subtree: true }); add(); } catch (e) {} };
+      fr0.addEventListener('load', install); setTimeout(install, 1500); }
     if (A.autoSong) { A.autoSong = false; let tries = 0; const fr = wrap.querySelector('iframe'); const iv = setInterval(() => { try { const d = fr.contentDocument; const pb = d && [...d.querySelectorAll('button')].find(b => b.textContent.trim() === 'Perform'); if (pb) pb.click(); const row = d && d.querySelector('.song.on'); if (row) { row.click(); clearInterval(iv); } } catch (e) {} if (++tries > 40) clearInterval(iv); }, 500); }
   };
 
