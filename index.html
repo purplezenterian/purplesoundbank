@@ -1718,6 +1718,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
     if (single) enforceSingle();
     saveOn(); applyBankOrder(); renderPads(); applyMix(); syncKnobs();
   }
+  window.__psbImportSong = function (s) { songs = songs.filter(x => x.id !== s.id); songs.push(s); curSong = s.id; saveSongs(); setPerf(true); renderPerf(); recallSong(s.id); };
   function recallSong(id) {
     const s = songs.find(x => x.id === id); if (!s) return;
     curSong = id; saveSongs();
@@ -2292,51 +2293,8 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
 })();
 </script>
 
-<script>
-/* Share link icon in Perform > Edit (adds a copy-link button to each set list) */
-(function(){
-  var SB='https://qfwfwypkpzonsajhxeaz.supabase.co', KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFmd2Z3eXBrcHpvbnNhamh4ZWF6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQzNTcyMDcsImV4cCI6MjEwOTkzMzIwN30.BK-vOd5VQ5eEi3qOZ6PnoYVbIPd4f_spE7OkECG9TIA', SITE=location.origin + '/purplesoundbank/site/';
-  function token(){ try{ for(var i=0;i<localStorage.length;i++){ var k=localStorage.key(i); if(/^sb-.*-auth-token$/.test(k)){ var v=JSON.parse(localStorage.getItem(k)); if(v&&v.access_token){ if(v.expires_at && v.expires_at*1000 < Date.now()+30000 && v.refresh_token){ return fetch(SB+'/auth/v1/token?grant_type=refresh_token',{method:'POST',headers:{'apikey':KEY,'Content-Type':'application/json'},body:JSON.stringify({refresh_token:v.refresh_token})}).then(function(r){ if(!r.ok) throw 0; return r.json(); }).then(function(n){ n.expires_at=Math.floor(Date.now()/1000)+(n.expires_in||3600); try{ localStorage.setItem(k,JSON.stringify(n)); }catch(e){} return n.access_token; }).catch(function(){ return null; }); } return Promise.resolve(v.access_token); } } } }catch(e){} return Promise.resolve(null); }
-  function flash(b,t){ b.textContent=t; setTimeout(function(){ b.textContent='\uD83D\uDD17'; },1600); }
-  function add(){
-    document.querySelectorAll('.song .ed').forEach(function(ed){
-      if(ed.querySelector('.sharebtn')) return;
-      var b=document.createElement('span'); b.className='sharebtn'; b.textContent='\uD83D\uDD17'; b.title='Copy link to this set list';
-      b.addEventListener('click',function(e){
-        e.stopPropagation();
-        var row=ed.closest('.song'), idx=(+row.querySelector('.no').textContent)-1, songs=[];
-        try{ songs=JSON.parse(localStorage.getItem('psb.songs')||'[]'); }catch(x){}
-        var s=songs[idx]; if(!s){ flash(b,'!'); return; }
-        token().then(function(t){ if(!t){ window.open(SITE+'#/login','_blank'); flash(b,'login'); return; }
-        return fetch(SB+'/rest/v1/rpc/create_share',{method:'POST',headers:{'apikey':KEY,'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({n:s.name||'Song',s:s})})
-          .then(function(r){ if(!r.ok) throw new Error(r.status); return r.json(); })
-          .then(function(code){ var u=SITE+'#/s/'+code; var done=function(){ flash(b,'\u2713'); };
-            if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(u).then(done,function(){ prompt('Copy this link',u); }); }
-            else { prompt('Copy this link',u); } })
-          .catch(function(){ window.open(SITE+'#/login','_blank'); flash(b,'login'); }); });
-      });
-      ed.insertBefore(b, ed.firstChild);
-    });
-  }
-  new MutationObserver(add).observe(document.body,{childList:true,subtree:true}); add();
-})();
-</script>
-<script>
-(function(){
-  var SB='https://qfwfwypkpzonsajhxeaz.supabase.co', KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFmd2Z3eXBrcHpvbnNhamh4ZWF6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQzNTcyMDcsImV4cCI6MjEwOTkzMzIwN30.BK-vOd5VQ5eEi3qOZ6PnoYVbIPd4f_spE7OkECG9TIA', SITE=location.origin + '/purplesoundbank/site/', b=document.getElementById('copyurl'); if(!b) return;
-  function token(){ try{ for(var i=0;i<localStorage.length;i++){ var k=localStorage.key(i); if(/^sb-.*-auth-token$/.test(k)){ var v=JSON.parse(localStorage.getItem(k)); if(v&&v.access_token){ if(v.expires_at && v.expires_at*1000 < Date.now()+30000 && v.refresh_token){ return fetch(SB+'/auth/v1/token?grant_type=refresh_token',{method:'POST',headers:{'apikey':KEY,'Content-Type':'application/json'},body:JSON.stringify({refresh_token:v.refresh_token})}).then(function(r){ if(!r.ok) throw 0; return r.json(); }).then(function(n){ n.expires_at=Math.floor(Date.now()/1000)+(n.expires_in||3600); try{ localStorage.setItem(k,JSON.stringify(n)); }catch(e){} return n.access_token; }).catch(function(){ return null; }); } return Promise.resolve(v.access_token); } } } }catch(e){} return Promise.resolve(null); }
-  function flash(t){ b.textContent=t; setTimeout(function(){ b.textContent='Copy link'; },1800); }
-  b.addEventListener('click',function(){
-    var songs=[],cur=null; try{ songs=JSON.parse(localStorage.getItem('psb.songs')||'[]'); cur=JSON.parse(localStorage.getItem('psb.curSong')); }catch(x){}
-    var s=songs.filter(function(x){return x.id===cur;})[0]; if(!s){ flash('Select a song first'); return; }
-    token().then(function(t){ if(!t){ window.open(SITE+'#/login','_blank'); flash('Log in first'); return; }
-    return fetch(SB+'/rest/v1/rpc/create_share',{method:'POST',headers:{'apikey':KEY,'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({n:s.name||'Song',s:s})})
-      .then(function(r){ if(!r.ok) throw new Error(r.status); return r.json(); })
-      .then(function(code){ var u=SITE+'#/s/'+code; if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(u).then(function(){ flash('Link copied \u2713'); },function(){ prompt('Copy this link',u); }); } else { prompt('Copy this link',u); } })
-      .catch(function(){ window.open(SITE+'#/login','_blank'); flash('Log in first'); }); });
-  });
-})();
-</script>
+
+
 <style>.mid:not(.isperf) #copyurl, .mid:not(.isperf) #saveas{display:none}</style>
 <style id="bootHide">.mid{visibility:hidden}</style>
 <script>
@@ -2369,17 +2327,45 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
   setTimeout(fit,300); setTimeout(fit,1500);
 })();
 </script>
+
+<style>.mid:not(.isperf) #pasteurl{display:none}</style>
 <script>
 (function(){
-  var SITE=location.origin + '/purplesoundbank/site/', save=document.getElementById('copyurl')||document.getElementById('saveas'); if(!save) return;
-  var b=document.createElement('button'); b.className='fbtn'; b.id='pasteurl'; b.type='button'; b.style.gridColumn='1/-1'; b.title='Paste a shared set list link'; b.textContent='Paste link';
-  save.parentNode.insertBefore(b, save.nextSibling);
-  b.addEventListener('click',function(){
-    var u=prompt('Paste the set list link here'); if(!u) return;
-    var m=/#\/s\/([A-Za-z0-9]+)/.exec(u); if(!m){ b.textContent='Not a valid link'; setTimeout(function(){ b.textContent='Paste link'; },1800); return; }
-    location.href=SITE+'#/s/'+m[1];
+  if (window.__psbIO) return; window.__psbIO = 1;
+  var $ = function (i) { return document.getElementById(i); };
+  function b64u(buf){ var bin=''; for (var i=0;i<buf.length;i++) bin+=String.fromCharCode(buf[i]); return btoa(bin).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,''); }
+  function unb64u(s){ s=s.replace(/-/g,'+').replace(/_/g,'/'); while(s.length%4) s+='='; var bin=atob(s), out=new Uint8Array(bin.length); for (var i=0;i<bin.length;i++) out[i]=bin.charCodeAt(i); return out; }
+  async function pipe(bytes, stream){ var w=stream.writable.getWriter(); w.write(bytes); w.close(); return new Uint8Array(await new Response(stream.readable).arrayBuffer()); }
+  async function enc(obj){ return 'PSB1.' + b64u(await pipe(new TextEncoder().encode(JSON.stringify(obj)), new CompressionStream('deflate-raw'))); }
+  async function dec(txt){ var m=/PSB1\.([A-Za-z0-9_-]+)/.exec(txt||''); if(!m) throw 0; var o=JSON.parse(new TextDecoder().decode(await pipe(unb64u(m[1]), new DecompressionStream('deflate-raw')))); if(!o||typeof o.id!=='string'||!o.data) throw 0; return o; }
+  function readSongs(){ try{ return JSON.parse(localStorage.getItem('psb.songs')||'[]'); }catch(e){ return []; } }
+  function addSong(s){
+    if (typeof window.__psbImportSong === 'function') { window.__psbImportSong(s); return; }
+    var songs = readSongs().filter(function(x){ return x.id !== s.id; }); songs.push(s);
+    localStorage.setItem('psb.songs', JSON.stringify(songs)); localStorage.setItem('psb.curSong', JSON.stringify(s.id));
+    sessionStorage.setItem('psb.pend', String(songs.length-1)); location.reload();
+  }
+  function flash(b, t, back){ b.textContent = t; setTimeout(function(){ b.textContent = back; }, 1800); }
+  function mk(id, text){ var b=document.createElement('button'); b.className='fbtn'; b.id=id; b.type='button'; b.style.gridColumn='1/-1'; b.textContent=text; return b; }
+  var st=document.createElement('style'); st.textContent='.mid:not(.isperf) #copyurl, .mid:not(.isperf) #pasteurl{display:none}'; document.head.appendChild(st);
+  var sv=$('saveas'); if(!sv) return;
+  var old=$('copyurl'); if(old) old.remove(); old=$('pasteurl'); if(old) old.remove();
+  var c=mk('copyurl','Copy link'), p=mk('pasteurl','Paste link'); sv.after(c); c.after(p);
+  c.addEventListener('click', async function(){
+    var cur=null; try{ cur=JSON.parse(localStorage.getItem('psb.curSong')); }catch(e){}
+    var s=readSongs().filter(function(x){ return x.id===cur; })[0]; if(!s){ flash(c,'Select a song first','Copy link'); return; }
+    var code=await enc(s);
+    try{ await navigator.clipboard.writeText(code); flash(c,'Copied ✓','Copy link'); }
+    catch(e){ prompt('Copy this link', code); }
   });
+  p.addEventListener('click', async function(){
+    var txt=''; try{ txt=await navigator.clipboard.readText(); }catch(e){}
+    if(!/PSB1\./.test(txt)) txt = prompt('Paste the song link here') || '';
+    if(!txt) return;
+    try{ addSong(await dec(txt)); flash(p,'Added ✓','Paste link'); }catch(e){ flash(p,'Not a valid link','Paste link'); }
+  });
+  var pend=null; try{ pend=sessionStorage.getItem('psb.pend'); sessionStorage.removeItem('psb.pend'); }catch(e){}
+  if(pend!==null){ var n=0, iv=setInterval(function(){ try{ var pb=$('m-perf'); if(pb && !pb.classList.contains('on')) pb.click(); var rows=document.querySelectorAll('.song'); if(rows[+pend]){ rows[+pend].click(); clearInterval(iv); } }catch(e){} if(++n>40) clearInterval(iv); },300); }
 })();
 </script>
-<style>.mid:not(.isperf) #pasteurl{display:none}</style>
 </body></html>
