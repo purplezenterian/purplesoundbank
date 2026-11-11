@@ -273,6 +273,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
     <div class="pair"><button class="fbtn" id="mode-lib" type="button" aria-pressed="false">LIB</button><button class="fbtn" id="mode-eq" type="button" aria-pressed="false">EQ</button><button class="fbtn" id="mode-fx" type="button" aria-pressed="false">FX</button></div>
     <div class="pair"><button class="fbtn" id="undo" type="button" disabled title="Undo (Ctrl/Cmd+Z)">&#8630; Undo</button><button class="fbtn" id="redo" type="button" disabled title="Redo (Ctrl/Cmd+Shift+Z)">Redo &#8631;</button></div>
     <button class="fbtn" id="saveas" type="button" title="Save this patch as a song in your set list" style="grid-column:1/-1">Save as&hellip;</button>
+    <button class="fbtn" id="copyurl" type="button" title="Copy a link to the current song" style="grid-column:1/-1">Copy link</button>
   </div>
   <div class="led" id="led">
     <div class="led-head"><span id="led-title">Sound</span><span class="sub">Purple SoundBank</span></div>
@@ -2318,6 +2319,22 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
     });
   }
   new MutationObserver(add).observe(document.body,{childList:true,subtree:true}); add();
+})();
+</script>
+<script>
+(function(){
+  var SB='https://qfwfwypkpzonsajhxeaz.supabase.co', KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFmd2Z3eXBrcHpvbnNhamh4ZWF6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQzNTcyMDcsImV4cCI6MjEwOTkzMzIwN30.BK-vOd5VQ5eEi3qOZ6PnoYVbIPd4f_spE7OkECG9TIA', SITE=location.origin + '/purplesoundbank/site/', b=document.getElementById('copyurl'); if(!b) return;
+  function token(){ try{ for(var i=0;i<localStorage.length;i++){ var k=localStorage.key(i); if(/^sb-.*-auth-token$/.test(k)){ var v=JSON.parse(localStorage.getItem(k)); if(v&&v.access_token) return v.access_token; } } }catch(e){} return null; }
+  function flash(t){ b.textContent=t; setTimeout(function(){ b.textContent='Copy link'; },1800); }
+  b.addEventListener('click',function(){
+    var songs=[],cur=null; try{ songs=JSON.parse(localStorage.getItem('psb.songs')||'[]'); cur=JSON.parse(localStorage.getItem('psb.curSong')); }catch(x){}
+    var s=songs.filter(function(x){return x.id===cur;})[0]; if(!s){ flash('Select a song first'); return; }
+    var t=token(); if(!t){ window.open(SITE+'#/login','_blank'); flash('Log in first'); return; }
+    fetch(SB+'/rest/v1/rpc/create_share',{method:'POST',headers:{'apikey':KEY,'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({n:s.name||'Song',s:s})})
+      .then(function(r){ if(!r.ok) throw new Error(r.status); return r.json(); })
+      .then(function(code){ var u=SITE+'#/s/'+code; if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(u).then(function(){ flash('Link copied \u2713'); },function(){ prompt('Copy this link',u); }); } else { prompt('Copy this link',u); } })
+      .catch(function(){ window.open(SITE+'#/login','_blank'); flash('Log in first'); });
+  });
 })();
 </script>
 </body></html>
