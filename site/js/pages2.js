@@ -159,6 +159,11 @@
     A.setTitle('Play');
     const bar = h('div', { class: 'loadbar' }, h('i')); const status = h('p', { class: 'muted center' }, 'Preparing your instrument…');
     A.render(h('div', { class: 'card narrow center' }, h('h2', null, 'Opening the instrument'), status, bar, h('p', { class: 'small muted' }, 'Tip: use Chrome or Edge to play with a MIDI keyboard.')));
+    // Coming back from Stripe's card / Apple Pay page: use the new card, take the first £5, then carry on into the instrument.
+    { const cardId = A.query.get('card'); if (cardId) {
+      status.textContent = 'Taking your first £5…'; history.replaceState(null, '', '#/play');
+      try { await api.upgradeNow(cardId); } catch (e) { status.textContent = (e && e.message) || 'The payment did not go through.'; await new Promise(r => setTimeout(r, 2500)); }
+    } }
     let url = await api.instrumentUrl(), src = url, srcdoc = null, blobUrl = null;
     if (C.mode !== 'mock') {
       const res = await fetch(url); if (!res.ok) throw new Error('Could not load the instrument (' + res.status + ')');
@@ -189,7 +194,7 @@
       const note = h('p', { class: 'small muted', style: 'min-height:1.2em' }, '');
       const go = h('button', { class: 'btn primary', onclick: async () => {
         go.disabled = true; no.disabled = true; note.textContent = 'Taking payment…';
-        try { await api.upgradeNow(); box.remove(); window.removeEventListener('message', onMsg); cleanup(); R.play(); }
+        try { const r = await api.upgradeNow(); if (r && r.needCard) { note.textContent = 'Opening secure payment…'; location.href = r.url; return; } box.remove(); window.removeEventListener('message', onMsg); cleanup(); R.play(); }
         catch (e) { note.textContent = (e && e.message) || 'That did not work. Please try again.'; go.disabled = false; no.disabled = false; }
       } }, 'Pay £5 and unlock everything');
       const no = h('button', { class: 'btn', onclick: () => box.remove() }, 'Not now');
