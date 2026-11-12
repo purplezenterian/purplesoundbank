@@ -729,6 +729,9 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
   }
 
   const monoHeld = [];   // keys held down while a mono sound is on, oldest first (last-note priority)
+  // One-shot: the Attack knob all the way left (punch 100%) on an 'atkMid' sound. Each key is a single 808 hit that rings out and decays on its own.
+  const oneShots = new Set();
+  const osOn = c => !!(c.atkMid && c.env.a <= -0.99);
   function monoActive() { return channels.some(c => c.monoVoice && c.ready && !c.off && !c.mute); }
   function noteOn(src, note, vel, monoOnly) {
     unlock();
@@ -740,7 +743,14 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
     // Mono sounds (basses, leads): a new note cuts the one still sounding, so only one voice plays at a time.
     // Mono sounds: a new note takes over from the one still sounding. If one is sounding the move is legato: the old note
     // melts away while the new one comes in softly from the steady part of the sound, with no fresh attack.
-    for (const mc of channels) { mc.legatoNow = false; if (mc.monoVoice && mc.ready && !mc.off && !mc.mute) for (const o of [...active.values(), ...sustained]) for (const p of o.parts) if (p.ch === mc) { mc.legatoNow = true; try { if (mc.holdFix) holdAt(p.g.gain, t); else { p.g.gain.cancelScheduledValues(t); p.g.gain.setValueAtTime(p.g.gain.value, t); } p.g.gain.setTargetAtTime(0, t, mc.legato ? mc.legato.out : 0.022); p.s.stop(t + (mc.legato ? 8 * mc.legato.out : 0.2)); } catch (e) {} } }
+    for (const mc of channels) {
+      mc.legatoNow = false;
+      if (!(mc.monoVoice && mc.ready && !mc.off && !mc.mute)) continue;
+      const os = osOn(mc);   // one-shot (punch 100%): every note is a fresh hit that takes over at once, never legato
+      const cutP = p => { try { if (mc.holdFix) holdAt(p.g.gain, t); else { p.g.gain.cancelScheduledValues(t); p.g.gain.setValueAtTime(p.g.gain.value, t); } p.g.gain.setTargetAtTime(0, t, os ? 0.006 : (mc.legato ? mc.legato.out : 0.022)); p.s.stop(t + (os ? 0.06 : (mc.legato ? 8 * mc.legato.out : 0.2))); } catch (e) {} };
+      for (const o of [...active.values(), ...sustained]) for (const p of o.parts) if (p.ch === mc) { mc.legatoNow = !os; cutP(p); }
+      for (const p of [...oneShots]) if (p.ch === mc) cutP(p);
+    }
     const shape = velShape(note, vel);
     const amp = shape.amp;
     const parts = [];
@@ -775,7 +785,8 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
       if (ch.mod === 'sweep') sweepSrc.connect(s.detune);
       if (ch.analog || ch.drift) driftGain.connect(s.detune);
       const lp = ch.loops.get(k);
-      if (lp) { s.loop = true; s.loopStart = lp.start; s.loopEnd = lp.end; }
+      const oneShot = osOn(ch);
+      if (lp && !oneShot) { s.loop = true; s.loopStart = lp.start; s.loopEnd = lp.end; }
       const g = ctx.createGain();
       const lg = ch.monoVoice && ch.legatoNow;   // legato: played over a note that is still sounding
       const e = ch.env, at = lg ? Math.max(ch.legato ? ch.legato.in : 0.03, e.a) : Math.max(hv ? hv.at : 0.002, e.a, ch.atk || 0);
@@ -845,7 +856,13 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
       // The second fat layer starts from a different spot inside the sustain loop, so the two layers are not copies of each
       // other. Identical copies add up on the attack and then drift in and out of phase, which is what makes a pad "dip".
       s.start(t, (lg && lp) ? lp.start * 0.4 : (ch.fatOffset && dOff > 0 && lp) ? lp.start + 0.15 + Math.random() * Math.max(0.1, lp.end - lp.start - 0.4) : 0);
-      parts.push({ s, g, f, ch });
+      if (oneShot) {   // rings out with its own decay, whatever the key does
+        g.gain.setTargetAtTime(0, t + 0.12, 0.5);
+        const part = { s, g, f, ch, oneShot: true };
+        oneShots.add(part); s.addEventListener('ended', () => oneShots.delete(part));
+        try { s.stop(t + 3.5); } catch (e) {}
+        parts.push(part);
+      } else parts.push({ s, g, f, ch });
       ch.live = (ch.live || 0) + 1;
       s.addEventListener('ended', () => { ch.live = Math.max(0, ch.live - 1); });
       if (ch.polyG) {
@@ -916,6 +933,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
     unhold(v);
     const t = ctx.currentTime;
     for (const p of v.parts) {
+      if (p.oneShot) continue;   // one-shot hits ring out; letting go of the key changes nothing
       const tau = Math.max(0.005, p.ch.env.r / 4);
       if (p.ch.holdFix) holdAt(p.g.gain, t);
       else { const cur = p.g.gain.value; p.g.gain.cancelScheduledValues(t); p.g.gain.setValueAtTime(cur, t); }
@@ -932,7 +950,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
       const wasTop = mi === monoHeld.length - 1;
       monoHeld.splice(mi, 1);
       // Mono: letting go of the newest key brings back the key still held before it.
-      if (wasTop && monoHeld.length && monoActive()) { const pv = monoHeld[monoHeld.length - 1]; setTimeout(() => { if (monoHeld.includes(pv)) noteOn('mono:' + pv.src, pv.note, pv.vel, true); }, 0); }
+      if (wasTop && monoHeld.length && monoActive() && !channels.some(c => c.monoVoice && osOn(c))) { const pv = monoHeld[monoHeld.length - 1]; setTimeout(() => { if (monoHeld.includes(pv)) noteOn('mono:' + pv.src, pv.note, pv.vel, true); }, 0); }
     }
     const v = active.get(src);
     if (!v || v.up) return;
