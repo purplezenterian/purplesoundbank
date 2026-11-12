@@ -752,10 +752,13 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
       for (const dOff of layers) {
       const isSub = dOff === 'sub';
       const hv = ch.human ? humanize(vel, shape, ch) : null;
+      // Attack knob all the way left on an 'atkMid' sound = 808 punch: pitch drop, heavy sub thump, harder hit (fresh hits only).
+      const punch = (ch.atkMid && ch.env.a < 0 && !(ch.monoVoice && ch.legatoNow)) ? Math.min(1, -ch.env.a) : 0;
       const s = ctx.createBufferSource();
       s.buffer = ch.buffers.get(k);
       s.playbackRate.value = Math.pow(2, (nt - k) / 12) * (isSub ? 0.5 : 1);
       s.detune.value = bendVal * 200 + (isSub ? 0 : dOff) * (hv ? hv.spread : 8) + (hv ? hv.detune : 0) + ((ch.analog || ch.drift) ? (Math.random() * 2 - 1) * 3 : 0);
+      if (punch > 0) { const d0 = s.detune.value; s.detune.setValueAtTime(d0 + punch * 900, t); s.detune.setTargetAtTime(d0, t, 0.04); }
       // slide: only when a note is played over one that is still sounding (legato) the pitch glides from the old note into the new one.
       if (ch.slide && ch.monoVoice && ch.legatoNow && glideFrom !== null && glideFrom !== note) { const d0 = s.detune.value; s.detune.setValueAtTime(d0 + (glideFrom - note) * 100, t); s.detune.linearRampToValueAtTime(d0, t + ch.slide); }
       { const gs = glideSecs(Math.max(fx.glide, ch.fxo.glide, ch.glideDef)); if (gs > 0 && glideFrom !== null && glideFrom !== note) { const d0 = s.detune.value; s.detune.setValueAtTime(d0 + (glideFrom - note) * 100, t); s.detune.linearRampToValueAtTime(d0, t + gs); } }
@@ -770,9 +773,9 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
       const lg = ch.monoVoice && ch.legatoNow;   // legato: played over a note that is still sounding
       const e = ch.env, at = lg ? Math.max(ch.legato ? ch.legato.in : 0.03, e.a) : Math.max(hv ? hv.at : 0.002, e.a, ch.atk || 0);
       const ampc = (ch.tame ? Math.min(hv ? hv.amp : amp, 1.0) : (hv ? hv.amp : amp)) * (ch.fat ? 0.72 : 1);   // tame: pressing harder brightens but never gets louder;
-      const ampcSub = isSub ? ch.lowEnd.sub * leDepth * subFade : (leDepth > 0 ? 1 - (ch.lowEnd.duck || 0) * leDepth : 1);   // deep notes: the added weight is paid for in level so it never clips
+      const ampcSub = (isSub ? ch.lowEnd.sub * leDepth * subFade : (leDepth > 0 ? 1 - (ch.lowEnd.duck || 0) * leDepth : 1)) * (1 - 0.45 * punch);   // deep notes: the added weight is paid for in level so it never clips
       g.gain.setValueAtTime(0, t);
-      const biteDb = (ch.bite || 0) + (ch.atkMid && e.a < 0 ? -e.a * 8 : 0);   // the Attack knob left of centre adds punch
+      const biteDb = (ch.bite || 0) + (punch * 4);   // the Attack knob left of centre adds punch
       if (biteDb && e.s >= 0.999 && !lg && !(ch.atkMid && e.a > 0.004)) {
         // Bite: the note lands harder than it sustains, then settles in about a quarter of a second.
         g.gain.linearRampToValueAtTime((ampc * ampcSub) * Math.pow(10, biteDb / 20), t + Math.min(at, 0.004));
@@ -814,7 +817,13 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
         s.connect(g); g.connect(vf); vf.connect(sm); sm.connect(ls); ls.connect(f);
       } else { s.connect(g); g.connect(vf); vf.connect(sm); sm.connect(f); }
       let pan = null;
-      if (ch.fat) { pan = ctx.createStereoPanner(); pan.pan.value = (dOff < 0 ? -1 : 1) * (ch.fatPan || 0.45); f.connect(pan); pan.connect(ch.inp); } else f.connect(ch.inp);
+      let outN = f;
+      if (punch > 0) {   // the 808 thump: a sub boost that is biggest on the hit and settles back
+        const pk = ctx.createBiquadFilter(); pk.type = 'peaking'; pk.frequency.value = 55; pk.Q.value = 1.1;
+        pk.gain.setValueAtTime(8 * punch, t); pk.gain.setTargetAtTime(3 * punch, t + 0.02, 0.3);
+        f.connect(pk); outN = pk;
+      }
+      if (ch.fat) { pan = ctx.createStereoPanner(); pan.pan.value = (dOff < 0 ? -1 : 1) * (ch.fatPan || 0.45); outN.connect(pan); pan.connect(ch.inp); } else outN.connect(ch.inp);
       s.onended = () => { try { if (pan) pan.disconnect(); } catch (e) {} try { modGain.disconnect(s.detune); } catch (e) {} try { if (ch.vibGain) ch.vibGain.disconnect(s.detune); } catch (e) {} try { sweepSrc.disconnect(s.detune); } catch (e) {} try { if (vg) { modGain.disconnect(vg); vg.disconnect(); } } catch (e) {} try { driftGain.disconnect(s.detune); } catch (e) {} try { g.disconnect(); vf.disconnect(); sm.disconnect(); f.disconnect(); } catch (e) {} };
       // The second fat layer starts from a different spot inside the sustain loop, so the two layers are not copies of each
       // other. Identical copies add up on the attack and then drift in and out of phase, which is what makes a pad "dip".
