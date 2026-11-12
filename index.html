@@ -770,7 +770,8 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
       const isSub = dOff === 'sub';
       const hv = ch.human ? humanize(vel, shape, ch) : null;
       // Attack knob all the way left on an 'atkMid' sound = 808 punch: pitch drop, heavy sub thump, harder hit (fresh hits only).
-      const punch = (ch.atkMid && ch.env.a < 0 && !(ch.monoVoice && ch.legatoNow)) ? Math.min(1, -ch.env.a) : 0;
+      const punch = osOn(ch) ? 1 : 0;   // the full 808 only switches on with the knob all the way down
+      const pLvl = (ch.atkMid && ch.env.a < 0) ? Math.min(1, -ch.env.a) : 0;   // before that the knob just adds a harder hit
       const s = ctx.createBufferSource();
       s.buffer = ch.buffers.get(k);
       s.playbackRate.value = Math.pow(2, (nt - k) / 12) * (isSub ? 0.5 : 1);
@@ -793,7 +794,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
       const ampc = (ch.tame ? Math.min(hv ? hv.amp : amp, 1.0) : (hv ? hv.amp : amp)) * (ch.fat ? 0.72 : 1);   // tame: pressing harder brightens but never gets louder;
       const ampcSub = (isSub ? ch.lowEnd.sub * leDepth * subFade : (leDepth > 0 ? 1 - (ch.lowEnd.duck || 0) * leDepth : 1)) * (1 - 0.25 * punch);   // deep notes: the added weight is paid for in level so it never clips
       g.gain.setValueAtTime(0, t);
-      const biteDb = (ch.bite || 0) + (punch * 8);   // the Attack knob left of centre adds punch
+      const biteDb = (ch.bite || 0) + (pLvl * 8);   // the Attack knob left of centre adds punch
       if (biteDb && e.s >= 0.999 && !lg && !(ch.atkMid && e.a > 0.004)) {
         // Bite: the note lands harder than it sustains, then settles in about a quarter of a second.
         g.gain.linearRampToValueAtTime((ampc * ampcSub) * Math.pow(10, biteDb / 20), t + Math.min(at, 0.004));
