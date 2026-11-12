@@ -1225,10 +1225,10 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
   ];
   // Sounds with 'atkMid' put the Attack knob's 12 o'clock on the sound's own attack: left of it adds punch, right of it slows the attack.
   const midA = p => p.k === 'a' && focusCh && focusCh.atkMid;
-  // 'relMid': the Release knob's 12 o'clock is the sound's own release; left of it is shorter, right of it is longer.
+  // 'relMid': the Release knob's far-left is the sound's own release; turning right makes it longer.
   const midR = p => p.k === 'r' && focusCh && focusCh.relMid;
-  const toVal = (p, n) => midR(p) ? (n < 0.5 ? p.min + (focusCh.env0.r - p.min) * 2 * n : focusCh.env0.r + (p.max - focusCh.env0.r) * Math.pow(2 * (n - 0.5), p.curve)) : midA(p) ? (n < 0.5 ? -(1 - 2 * n) : 3 * Math.pow(2 * (n - 0.5), p.curve)) : p.min + (p.max - p.min) * Math.pow(n, p.curve);
-  const toNorm = (p, v) => midR(p) ? (v <= focusCh.env0.r ? 0.5 * (v - p.min) / (focusCh.env0.r - p.min) : 0.5 + 0.5 * Math.pow(Math.min(1, (v - focusCh.env0.r) / (p.max - focusCh.env0.r)), 1 / p.curve)) : midA(p) ? (v < 0 ? (1 + Math.max(-1, v)) / 2 : 0.5 + 0.5 * Math.pow(Math.min(1, v / 3), 1 / p.curve)) : Math.pow(Math.min(1, Math.max(0, (v - p.min) / (p.max - p.min))), 1 / p.curve);
+  const toVal = (p, n) => midR(p) ? focusCh.env0.r + (p.max - focusCh.env0.r) * Math.pow(n, p.curve) : midA(p) ? (n < 0.5 ? -(1 - 2 * n) : 3 * Math.pow(2 * (n - 0.5), p.curve)) : p.min + (p.max - p.min) * Math.pow(n, p.curve);
+  const toNorm = (p, v) => midR(p) ? Math.pow(Math.max(0, Math.min(1, (v - focusCh.env0.r) / (p.max - focusCh.env0.r))), 1 / p.curve) : midA(p) ? (v < 0 ? (1 + Math.max(-1, v)) / 2 : 0.5 + 0.5 * Math.pow(Math.min(1, v / 3), 1 / p.curve)) : Math.pow(Math.min(1, Math.max(0, (v - p.min) / (p.max - p.min))), 1 / p.curve);
   const fmt = (p, v) => (p.k === 'a' && v < 0) ? 'Punch ' + Math.round(-v * 100) + '%' : p.pct ? Math.round(v * 100) + '%' : (v < 1 ? v.toFixed(2) : v.toFixed(1)) + ' s';
   let editAll = !!ui.all;
   const envKnobs = {};
