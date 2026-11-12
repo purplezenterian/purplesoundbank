@@ -1482,7 +1482,8 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
   let libCat = 'All';
   function renderLib() {
     const cats = $('lib-cats'), list = $('lib-list'), q = $('lib-search').value.trim().toLowerCase();
-    const LOCKED = window.PSB_LOCKED || [], NEWIDS = window.PSB_NEW || [];
+    const LOCKED = window.PSB_LOCKED || [], NEWSINCE = window.PSB_NEW || {};
+    const fresh = id => { const t = Date.parse(NEWSINCE[id] || ''); return t > 0 && Date.now() < t + 7 * 864e5; };   // the "new" tag lasts 7 days from release
     const cnt = k => channels.filter(c => k === 'All' || c.cat === k).length + LOCKED.filter(c => k === 'All' || c.cat === k).length;
     cats.innerHTML = '';
     ['All'].concat(LIBCATS).forEach(k => {
@@ -1500,14 +1501,14 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
     lockedItems.forEach(c => {   // sounds that need a full plan: shown with a padlock; tapping asks the website to start the plan
       const b = document.createElement('button'); b.type = 'button'; b.className = 'lib-row locked';
       b.innerHTML = '<span class="nm"><span></span></span><span class="n"></span>'; b.querySelector('.nm span').textContent = c.name;
-      b.firstChild.appendChild(tag()); b.lastChild.textContent = '\uD83D\uDD12 ' + (c.cat || '');
+      if (fresh(c.id)) b.firstChild.appendChild(tag()); b.lastChild.textContent = '\uD83D\uDD12 ' + (c.cat || '');
       b.addEventListener('click', () => { try { window.parent.postMessage({ psb: 'upgrade', sound: c.id }, '*'); } catch (e) {} });
       list.appendChild(b);
     });
     items.forEach(c => {
       const b = document.createElement('button'); b.type = 'button';
       b.className = 'lib-row' + (focusCh === c && !c.mute ? ' on' : '');
-      b.innerHTML = '<span class="nm"><span></span></span><span class="n"></span>'; b.querySelector('.nm span').textContent = c.name; if (NEWIDS.includes(c.id)) b.firstChild.appendChild(tag()); b.lastChild.textContent = c.cat || '';
+      b.innerHTML = '<span class="nm"><span></span></span><span class="n"></span>'; b.querySelector('.nm span').textContent = c.name; if (fresh(c.id)) b.firstChild.appendChild(tag()); b.lastChild.textContent = c.cat || '';
       b.addEventListener('click', () => {
         if (c.off) { const e = firstEmptySlot(); placeOnBar(c, e >= 0 ? e : Math.max(0, order.indexOf(focusCh ? focusCh.id : ''))); }
         c.mute = false; focusCh = c; if (c.alone) for (const o of channels) if (o !== c) o.mute = true;   // an 'alone' sound (a bass) plays by itself when picked
