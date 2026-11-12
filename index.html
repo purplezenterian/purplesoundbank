@@ -717,7 +717,9 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
     if (prev && !prev.up) noteOff(src);
     const t = ctx.currentTime;
     // Mono sounds (basses, leads): a new note cuts the one still sounding, so only one voice plays at a time.
-    for (const mc of channels) if (mc.monoVoice && mc.ready && !mc.off && !mc.mute) for (const o of [...active.values(), ...sustained]) for (const p of o.parts) if (p.ch === mc) { try { p.g.gain.cancelScheduledValues(t); p.g.gain.setValueAtTime(p.g.gain.value, t); p.g.gain.setTargetAtTime(0, t, 0.012); p.s.stop(t + 0.15); } catch (e) {} }
+    // Mono sounds: a new note takes over from the one still sounding. If one is sounding the move is legato: the old note
+    // melts away while the new one comes in softly from the steady part of the sound, with no fresh attack.
+    for (const mc of channels) { mc.legatoNow = false; if (mc.monoVoice && mc.ready && !mc.off && !mc.mute) for (const o of [...active.values(), ...sustained]) for (const p of o.parts) if (p.ch === mc) { mc.legatoNow = true; try { p.g.gain.cancelScheduledValues(t); p.g.gain.setValueAtTime(p.g.gain.value, t); p.g.gain.setTargetAtTime(0, t, 0.04); p.s.stop(t + 0.35); } catch (e) {} } }
     const shape = velShape(note, vel);
     const amp = shape.amp;
     const parts = [];
@@ -742,10 +744,11 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
       const lp = ch.loops.get(k);
       if (lp) { s.loop = true; s.loopStart = lp.start; s.loopEnd = lp.end; }
       const g = ctx.createGain();
-      const e = ch.env, at = Math.max(hv ? hv.at : 0.002, e.a);
+      const lg = ch.monoVoice && ch.legatoNow;   // legato: played over a note that is still sounding
+      const e = ch.env, at = lg ? Math.max(0.07, e.a) : Math.max(hv ? hv.at : 0.002, e.a);
       const ampc = (ch.tame ? Math.min(hv ? hv.amp : amp, 1.0) : (hv ? hv.amp : amp)) * (ch.fat ? 0.72 : 1);   // tame: pressing harder brightens but never gets louder
       g.gain.setValueAtTime(0, t);
-      if (ch.bite && e.s >= 0.999) {
+      if (ch.bite && e.s >= 0.999 && !lg) {
         // Bite: the note lands harder than it sustains, then settles in about a quarter of a second.
         g.gain.linearRampToValueAtTime(ampc * Math.pow(10, ch.bite / 20), t + Math.min(at, 0.004));
         g.gain.setTargetAtTime(ampc, t + Math.min(at, 0.004), 0.11);
@@ -787,7 +790,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
       s.onended = () => { try { if (pan) pan.disconnect(); } catch (e) {} try { modGain.disconnect(s.detune); } catch (e) {} try { sweepSrc.disconnect(s.detune); } catch (e) {} try { if (vg) { modGain.disconnect(vg); vg.disconnect(); } } catch (e) {} try { driftGain.disconnect(s.detune); } catch (e) {} try { g.disconnect(); vf.disconnect(); sm.disconnect(); f.disconnect(); } catch (e) {} };
       // The second fat layer starts from a different spot inside the sustain loop, so the two layers are not copies of each
       // other. Identical copies add up on the attack and then drift in and out of phase, which is what makes a pad "dip".
-      s.start(t, (ch.fatOffset && dOff > 0 && lp) ? lp.start + 0.15 + Math.random() * Math.max(0.1, lp.end - lp.start - 0.4) : 0);
+      s.start(t, (lg && lp) ? lp.start : (ch.fatOffset && dOff > 0 && lp) ? lp.start + 0.15 + Math.random() * Math.max(0.1, lp.end - lp.start - 0.4) : 0);
       parts.push({ s, g, f, ch });
       ch.live = (ch.live || 0) + 1;
       s.addEventListener('ended', () => { ch.live = Math.max(0, ch.live - 1); });
