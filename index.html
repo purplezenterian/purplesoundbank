@@ -772,7 +772,8 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
       const ampc = (ch.tame ? Math.min(hv ? hv.amp : amp, 1.0) : (hv ? hv.amp : amp)) * (ch.fat ? 0.72 : 1);   // tame: pressing harder brightens but never gets louder;
       const ampcSub = isSub ? ch.lowEnd.sub * leDepth * subFade : (leDepth > 0 ? 1 - (ch.lowEnd.duck || 0) * leDepth : 1);   // deep notes: the added weight is paid for in level so it never clips
       g.gain.setValueAtTime(0, t);
-      const biteDb = (ch.bite || 0) + (ch.atkMid && e.a < 0 ? -e.a * 8 : 0);   // the Attack knob left of centre adds punch
+      const biteHi = ch.bite && ch.atkMid ? Math.max(0.15, Math.min(1, 1 - (note - 48) / 16)) : 1;   // from C4 up the built-in bite fades out so high notes never distort
+      const biteDb = (ch.bite || 0) * biteHi + (ch.atkMid && e.a < 0 ? -e.a * 8 * Math.max(0.35, biteHi) : 0);   // the Attack knob left of centre adds punch
       if (biteDb && e.s >= 0.999 && !lg && !(ch.atkMid && e.a > 0.004)) {
         // Bite: the note lands harder than it sustains, then settles in about a quarter of a second.
         g.gain.linearRampToValueAtTime((ampc * ampcSub) * Math.pow(10, biteDb / 20), t + Math.min(at, 0.004));
