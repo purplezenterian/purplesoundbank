@@ -71,6 +71,7 @@
 
     async getSubscription() { const u = await me(); if (!u) return null; const d = await q(sb.from('subscriptions').select('status,trial_end,current_period_end,cancel_at_period_end').eq('user_id', u).maybeSingle()); return d || null; },
     async startCheckout() { const d = await fnOrThrow('create-checkout'); return { url: d.url, trial: d.trial }; },
+    async upgradeNow() { await fnOrThrow('upgrade-now'); return { ok: true }; },
     async openPortal() { const d = await fnOrThrow('billing-portal'); return { url: d.url }; },
     async instrumentUrl() { const d = await fnOrThrow('get-instrument', { deviceId: await PSB_DEVICE.deviceId() }); return d.url; },
 

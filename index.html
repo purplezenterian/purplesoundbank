@@ -150,6 +150,9 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
 .lib-row.on { background: rgba(var(--glow-rgb), .28); color: #fff; text-shadow: 0 0 8px rgba(var(--glow-rgb), 1); }
 .lib-row .n { color: #5b4690; font-size: 10px; }
 .lib-row.dim { opacity: .45; }
+.lib-row .nm { display: inline-flex; align-items: center; gap: 6px; }
+.newtag { font-size: 11px; font-weight: 500; color: #fff; border: 1px solid var(--glow); border-radius: 6px; padding: 1px 6px; box-shadow: 0 0 10px rgba(var(--glow-rgb), .45), inset 0 0 8px rgba(var(--glow-rgb), .35); line-height: 1.3; }
+.lib-row.locked { color: #b9a3ee; }
 .lib-empty { padding: 10px 8px; color: #5b4690; font-size: 11px; letter-spacing: .14em; text-transform: uppercase; }
 .led-idle { display: none; flex: 1; position: relative; min-height: 84px; }
 .led-idle canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
@@ -1479,7 +1482,8 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
   let libCat = 'All';
   function renderLib() {
     const cats = $('lib-cats'), list = $('lib-list'), q = $('lib-search').value.trim().toLowerCase();
-    const cnt = k => channels.filter(c => k === 'All' || c.cat === k).length;
+    const LOCKED = window.PSB_LOCKED || [], NEWIDS = window.PSB_NEW || [];
+    const cnt = k => channels.filter(c => k === 'All' || c.cat === k).length + LOCKED.filter(c => k === 'All' || c.cat === k).length;
     cats.innerHTML = '';
     ['All'].concat(LIBCATS).forEach(k => {
       const b = document.createElement('button'); b.type = 'button';
@@ -1490,11 +1494,20 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
     });
     list.innerHTML = '';
     const items = channels.filter(c => (libCat === 'All' || c.cat === libCat) && (!q || c.name.toLowerCase().includes(q)));
-    if (!items.length) { const d = document.createElement('div'); d.className = 'lib-empty'; d.textContent = 'Nothing here yet'; list.appendChild(d); }
+    const lockedItems = LOCKED.filter(c => (libCat === 'All' || c.cat === libCat) && (!q || c.name.toLowerCase().includes(q)));
+    if (!items.length && !lockedItems.length) { const d = document.createElement('div'); d.className = 'lib-empty'; d.textContent = 'Nothing here yet'; list.appendChild(d); }
+    const tag = () => { const t = document.createElement('span'); t.className = 'newtag'; t.textContent = 'new'; return t; };
+    lockedItems.forEach(c => {   // sounds that need a full plan: shown with a padlock; tapping asks the website to start the plan
+      const b = document.createElement('button'); b.type = 'button'; b.className = 'lib-row locked';
+      b.innerHTML = '<span class="nm"><span></span></span><span class="n"></span>'; b.querySelector('.nm span').textContent = c.name;
+      b.firstChild.appendChild(tag()); b.lastChild.textContent = '\uD83D\uDD12 ' + (c.cat || '');
+      b.addEventListener('click', () => { try { window.parent.postMessage({ psb: 'upgrade', sound: c.id }, '*'); } catch (e) {} });
+      list.appendChild(b);
+    });
     items.forEach(c => {
       const b = document.createElement('button'); b.type = 'button';
       b.className = 'lib-row' + (focusCh === c && !c.mute ? ' on' : '');
-      b.innerHTML = '<span></span><span class="n"></span>'; b.firstChild.textContent = c.name; b.lastChild.textContent = c.cat || '';
+      b.innerHTML = '<span class="nm"><span></span></span><span class="n"></span>'; b.querySelector('.nm span').textContent = c.name; if (NEWIDS.includes(c.id)) b.firstChild.appendChild(tag()); b.lastChild.textContent = c.cat || '';
       b.addEventListener('click', () => {
         if (c.off) { const e = firstEmptySlot(); placeOnBar(c, e >= 0 ? e : Math.max(0, order.indexOf(focusCh ? focusCh.id : ''))); }
         c.mute = false; focusCh = c; if (c.alone) for (const o of channels) if (o !== c) o.mute = true;   // an 'alone' sound (a bass) plays by itself when picked

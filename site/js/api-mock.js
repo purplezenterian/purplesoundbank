@@ -136,6 +136,7 @@
     },
     async openPortal() { return delay({ mock: true }); },
     async mockPortalAction(a) { const m = me(); const s = S.subs[m.id]; if (!s) return; if (a === 'cancel') s.cancel_at_period_end = true; if (a === 'resume') s.cancel_at_period_end = false; if (a === 'end') s.status = 'canceled'; if (a === 'pastdue') s.status = 'past_due'; if (a === 'restore') s.status = s.trial_end && now() < Date.parse(s.trial_end) ? 'trialing' : 'active'; save(); },
+    async upgradeNow() { return delay({ ok: true }); },
     async instrumentUrl() { needMember(); return PSB_CONFIG.mockInstrumentUrl; },
 
     // ---- profiles

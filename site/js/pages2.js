@@ -183,6 +183,24 @@
     const cleanup = () => { wrap.remove(); document.body.classList.remove('playing'); if (blobUrl) URL.revokeObjectURL(blobUrl); window.removeEventListener('hashchange', cleanup); };
     window.addEventListener('hashchange', cleanup);
     document.body.append(wrap);
+    // A padlocked sound in the instrument asks the website to move this member onto a full plan (pay £5 now, free month ends).
+    const onMsg = ev => {
+      if (!ev.data || ev.data.psb !== 'upgrade' || document.getElementById('upgrade-box')) return;
+      const note = h('p', { class: 'small muted', style: 'min-height:1.2em' }, '');
+      const go = h('button', { class: 'btn primary', onclick: async () => {
+        go.disabled = true; no.disabled = true; note.textContent = 'Taking payment…';
+        try { await api.upgradeNow(); box.remove(); window.removeEventListener('message', onMsg); cleanup(); R.play(); }
+        catch (e) { note.textContent = (e && e.message) || 'That did not work. Please try again.'; go.disabled = false; no.disabled = false; }
+      } }, 'Pay £5 and unlock everything');
+      const no = h('button', { class: 'btn', onclick: () => box.remove() }, 'Not now');
+      const box = h('div', { id: 'upgrade-box', style: 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.78);display:flex;align-items:center;justify-content:center;padding:16px' },
+        h('div', { class: 'card narrow center' }, h('h2', null, 'Unlock the new sounds'),
+          h('p', null, 'Start your full plan now: £5 is charged today and your free month ends. You get every sound, including the new basses, and every update from now on.'),
+          h('div', { class: 'row', style: 'justify-content:center;gap:10px' }, go, no), note));
+      document.body.append(box);
+    };
+    window.addEventListener('message', onMsg);
+    window.addEventListener('hashchange', () => window.removeEventListener('message', onMsg), { once: true });
     try { const fr3 = wrap.querySelector('iframe'); const putIO = () => { try { const d = fr3.contentDocument; if (!d || !d.body || d.__io || !d.getElementById('saveas')) return; d.__io = true; const sc = d.createElement('script'); sc.textContent = window.PSB_SONGIO; d.body.append(sc); } catch (e) {} }; fr3.addEventListener('load', () => { putIO(); setTimeout(putIO, 800); }); setTimeout(putIO, 1500); } catch (e) {}
     try { const fr1 = wrap.querySelector('iframe'); const fitIn = () => { try { const d = fr1.contentDocument, w = fr1.contentWindow; if (!d || !d.body) return; const z = parseFloat(d.body.style.zoom) || 1; const nat = d.documentElement.scrollHeight / z, vh = w.innerHeight; const target = nat > vh + 2 ? Math.max(0.55, Math.floor(vh / nat * 1000) / 1000) : 1; if (Math.abs(target - z) > 0.004) d.body.style.zoom = target; } catch (e) {} }; let ft = null; const soon = () => { clearTimeout(ft); ft = setTimeout(fitIn, 120); }; fr1.addEventListener('load', () => { soon(); try { fr1.contentWindow.addEventListener('resize', soon); const mid = fr1.contentDocument.querySelector('.mid'); if (mid) new MutationObserver(soon).observe(mid, { attributes: true, attributeFilter: ['class'] }); } catch (e) {} }); setTimeout(soon, 1500); } catch (e) {}
     { const auto = A.autoSong; A.autoSong = false; let tries = 0; const fr = wrap.querySelector('iframe'); const iv = setInterval(() => { try { const d = fr.contentDocument; const pb = d && [...d.querySelectorAll('button')].find(b => b.textContent.trim() === 'Perform'); if (pb) pb.click(); if (firstRun && !auto) { if (pb) clearInterval(iv); return; } const row = auto ? (d && d.querySelector('.song.on')) : (d && [...d.querySelectorAll('.song')].find(x => { const n = x.querySelector('.nm'); return n && /^\s*basic worship\s*$/i.test(n.textContent); })); if (row) { if (auto || !row.classList.contains('on')) row.click(); clearInterval(iv); } } catch (e) {} if (++tries > 40) clearInterval(iv); }, 500); }
