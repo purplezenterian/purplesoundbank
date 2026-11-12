@@ -832,7 +832,13 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
         const dr = ctx.createGain(); dr.gain.value = 1 + 3 * punch;
         const sh = ctx.createWaveShaper(); sh.curve = punchCurve(); sh.oversample = '2x';
         const po = ctx.createGain(); po.gain.value = 0.85;
-        f.connect(pk); pk.connect(dr); dr.connect(sh); sh.connect(po); outN = po;
+        f.connect(pk); pk.connect(dr); dr.connect(sh); sh.connect(po);
+        // full punch = full mono: the stereo image collapses to the centre as the knob goes left
+        const mix = ctx.createGain(), dryG = ctx.createGain(), wetG = ctx.createGain(), sp = ctx.createChannelSplitter(2);
+        dryG.gain.value = 1 - punch; wetG.gain.value = 0.5 * punch;
+        po.connect(dryG); dryG.connect(mix);
+        po.connect(sp); sp.connect(wetG, 0); sp.connect(wetG, 1); wetG.connect(mix);
+        outN = mix;
       }
       if (ch.fat) { pan = ctx.createStereoPanner(); pan.pan.value = (dOff < 0 ? -1 : 1) * (ch.fatPan || 0.45); outN.connect(pan); pan.connect(ch.inp); } else outN.connect(ch.inp);
       s.onended = () => { try { if (pan) pan.disconnect(); } catch (e) {} try { modGain.disconnect(s.detune); } catch (e) {} try { if (ch.vibGain) ch.vibGain.disconnect(s.detune); } catch (e) {} try { sweepSrc.disconnect(s.detune); } catch (e) {} try { if (vg) { modGain.disconnect(vg); vg.disconnect(); } } catch (e) {} try { driftGain.disconnect(s.detune); } catch (e) {} try { g.disconnect(); vf.disconnect(); sm.disconnect(); f.disconnect(); } catch (e) {} };
