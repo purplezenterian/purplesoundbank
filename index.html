@@ -624,6 +624,8 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
     return { start: ls / sr, end: le / sr };
   }
 
+  // One-time: Z Dry Bass's Release knob is now centred on its own release, so drop any older saved release to land it in the middle.
+  if (!store.get('relmidv1')) { const e0 = store.get('env.zdrybass', null); if (e0 && 'r' in e0) { delete e0.r; store.set('env.zdrybass', e0); } store.set('relmidv1', 1); }
   channels.forEach(c => { c.env = Object.assign({}, c.env0, store.get('env.' + c.id, {})); });
 
   async function loadChannel(ch) {
