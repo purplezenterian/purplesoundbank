@@ -197,12 +197,24 @@
     const onMsg = ev => {
       if (!ev.data || ev.data.psb !== 'upgrade' || document.getElementById('upgrade-box')) return;
       const note = h('p', { class: 'small muted', style: 'min-height:1.2em' }, '');
+      let stop = false;
+      const finish = () => { stop = true; box.remove(); window.removeEventListener('message', onMsg); cleanup(); R.play(); };
       const go = h('button', { class: 'btn primary', onclick: async () => {
-        go.disabled = true; no.disabled = true; note.textContent = 'Taking payment…';
-        try { const r = await api.upgradeNow(); if (r && r.needCard) { note.textContent = 'Opening secure payment…'; location.href = r.url; return; } box.remove(); window.removeEventListener('message', onMsg); cleanup(); R.play(); }
-        catch (e) { note.textContent = (e && e.message) || 'That did not work. Please try again.'; go.disabled = false; no.disabled = false; }
+        go.disabled = true; note.textContent = 'Taking payment…';
+        const tab = window.open('', '_blank');   // opened straight from the tap so the browser allows it; the payment page loads into it
+        try {
+          const r = await api.upgradeNow();
+          if (r && r.needCard) {
+            if (tab) { tab.location.href = r.url; note.textContent = 'Finish paying in the new tab. This page unlocks by itself when it is done.'; }
+            else { location.href = r.url; return; }
+            for (let i = 0; i < 200 && !stop; i++) { await new Promise(x => setTimeout(x, 3000)); if (stop) return; try { const sb = await api.getSubscription(); if (sb && sb.status === 'active') { try { tab.close(); } catch (e) {} return finish(); } } catch (e) {} }
+            return;
+          }
+          if (tab) { try { tab.close(); } catch (e) {} }
+          finish();
+        } catch (e) { if (tab) { try { tab.close(); } catch (x) {} } note.textContent = (e && e.message) || 'That did not work. Please try again.'; go.disabled = false; }
       } }, 'Pay £5 and unlock everything');
-      const no = h('button', { class: 'btn', onclick: () => box.remove() }, 'Not now');
+      const no = h('button', { class: 'btn', onclick: () => { stop = true; box.remove(); } }, 'Not now');
       const box = h('div', { id: 'upgrade-box', style: 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.78);display:flex;align-items:center;justify-content:center;padding:16px' },
         h('div', { class: 'card narrow center' }, h('h2', null, 'Unlock the new sounds'),
           h('p', null, 'Start your full plan now: £5 is charged today and your free month ends. You get every sound, including the new basses, and every update from now on.'),

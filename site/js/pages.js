@@ -101,6 +101,7 @@
   /* ---------- account ---------- */
   R.account = async () => {
     A.setTitle('Account');
+    { const cardId = A.query.get('card'); if (cardId) { history.replaceState(null, '', '#/account?checkout=success'); A.query.delete('card'); try { await api.upgradeNow(cardId); } catch (e) {} } }
     const [sub, devices, prof] = await Promise.all([api.getSubscription(), api.myDevices(), api.me()]);
     S.sub = sub; S.profile = prof;
     const ok = A.query.get('checkout') === 'success';
