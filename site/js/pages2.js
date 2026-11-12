@@ -164,6 +164,11 @@
       status.textContent = 'Taking your first £5…'; history.replaceState(null, '', '#/play');
       try { await api.upgradeNow(cardId); } catch (e) { status.textContent = (e && e.message) || 'The payment did not go through.'; await new Promise(r => setTimeout(r, 2500)); }
     } }
+    // Back from a full checkout: wait a few seconds for the payment to be recorded, then load the full instrument.
+    if (A.query.get('paid')) {
+      status.textContent = 'Confirming your payment…'; history.replaceState(null, '', '#/play');
+      for (let i = 0; i < 12; i++) { try { const sb = await api.getSubscription(); if (sb && sb.status === 'active') break; } catch (e) {} await new Promise(r => setTimeout(r, 1500)); }
+    }
     let url = await api.instrumentUrl(), src = url, srcdoc = null, blobUrl = null;
     if (C.mode !== 'mock') {
       const res = await fetch(url); if (!res.ok) throw new Error('Could not load the instrument (' + res.status + ')');
