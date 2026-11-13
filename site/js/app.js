@@ -150,9 +150,20 @@
     const fn = A.routes[top];
     if (!fn) return A.render(h('div', { class: 'empty' }, h('h2', null, 'Page not found'), h('a', { class: 'btn', href: '#/' }, 'Go home')));
     try { await fn(seg.slice(1)); } catch (e) { A.fail(e); }
-    renderNav();
+    renderNav(); ambassadorWelcome();
   }
   A.route = route;
+
+  // One-time "you're an Ambassador" notice, shown the first time a listed user opens the site.
+  let ambShown = false;
+  function ambassadorWelcome() {
+    const u = S.profile; if (ambShown || !u || !u.username || !((C.ambassadors || []).indexOf(String(u.username).toLowerCase()) >= 0)) return;
+    const key = 'site.ambassador.' + u.id; try { if (localStorage.getItem(key)) return; } catch (e) {}
+    ambShown = true; try { localStorage.setItem(key, '1'); } catch (e) {}
+    A.modal(h('div', { class: 'center' }, (() => { const d = h('div', { style: 'line-height:0' }); d.innerHTML = '<svg viewBox="0 0 24 24" width="54" height="54" aria-hidden="true"><path fill="#000" stroke="#fff" stroke-width="1.1" stroke-linejoin="round" d="M12 1.8l3 6.6 7.2.8-5.4 4.9 1.5 7.1L12 17.5l-6.3 3.7 1.5-7.1L1.8 9.2 9 8.4z"/></svg>'; return d; })(), h('h2', null, 'You are now a Purple SoundBank Ambassador'),
+      h('p', { class: 'muted' }, 'Thank you for repping us. You now have a black star next to your name across the hub. Everything else on your account stays the same.'),
+      h('button', { class: 'btn primary', onclick: () => A.closeModal() }, 'Got it')));
+  }
 
   async function boot() {
     $('#view').replaceChildren(h('div', { class: 'empty' }, 'Loading…'));
