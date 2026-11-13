@@ -36,11 +36,6 @@ public:
     juce::String browserName() const;
     float level() const { return meter.load(); }
 
-    // Screen mirror: the latest picture of the page, and messages back to it
-    juce::Image latestFrame() const { juce::ScopedLock sl (frameLock); return frame; }
-    uint32_t frameCount() const { return frameSeq.load(); }
-    void sendToBrowser (const juce::String& json) { server.sendText (json); }
-
 private:
     void wsConnected() override;
     void wsDisconnected() override;
@@ -56,10 +51,6 @@ private:
     // Only touched on the audio thread
     double readPos = 0.0, ratioTrim = 1.0, hostRate = 48000.0;
     bool primed = false;
-
-    mutable juce::CriticalSection frameLock;
-    juce::Image frame;
-    std::atomic<uint32_t> frameSeq { 0 };
 
     std::atomic<float> meter { 0.0f };
     juce::CriticalSection nameLock;
