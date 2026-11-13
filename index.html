@@ -1692,8 +1692,12 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
   mlbl.className = 'lbl';
   mlbl.textContent = 'Master';
   const ghost = document.createElement('div');
-  ghost.className = 'sm ghost';
-  ghost.innerHTML = '<button type="button" tabindex="-1">S</button>';
+  ghost.className = 'sm';
+  ghost.innerHTML = '<button type="button" class="bm" aria-label="Mute master" title="Mute everything">M</button>';
+  const masterMuteBtn = ghost.firstChild;
+  let masterMuted = false;
+  const setMasterMute = on => { masterMuted = on; masterMuteBtn.classList.toggle('on', on); mcol.classList.toggle('muted', on); outTrim.gain.setTargetAtTime(on ? 0 : 1, ctx.currentTime, 0.02); };
+  masterMuteBtn.addEventListener('click', () => setMasterMute(!masterMuted));
   mcol.append(mfe, mlbl, ghost);
   bankEl.appendChild(mcol);
   applyBankOrder();
