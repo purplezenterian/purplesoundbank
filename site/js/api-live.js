@@ -157,6 +157,19 @@
       return rows.reverse().map(m => Object.assign(m, { mine: m.author && m.author.id === u }));
     },
     async ambSend(body) { const u = await me(); body = String(body || '').trim(); if (!body) return; const { error } = await sb.from('amb_messages').insert({ author_id: u, body: body.slice(0, 2000) }); if (error) throw err(/row-level/i.test(error.message) ? 'Only Ambassadors can post here.' : error.message); return true; },
+    // ---- Ambassador group chats
+    async ambPeople() { const u = await me(); const rows = await q(sb.from('ambassador_people').select('id,username,display_name,avatar_color')); return rows.filter(x => x.id !== u); },
+    async gcList() { return q(sb.from('gc_groups').select('id,name,created_by,created_at,members:gc_members(is_owner,user:profiles!gc_members_user_id_fkey(id,username,display_name,avatar_color,is_admin))').order('id', { ascending: false })); },
+    async gcCreate(name, ids) { return q(sb.rpc('gc_create', { n: name, ids })); },
+    async gcAdd(g, u) { await q(sb.rpc('gc_add', { g, u })); },
+    async gcLeave(g) { await q(sb.rpc('gc_leave', { g })); },
+    async gcMessages(g) {
+      const u = await me();
+      const rows = await q(sb.from('gc_messages').select('id,body,created_at,author:profiles!gc_messages_author_id_fkey(id,username,display_name,avatar_color,is_admin)').eq('group_id', g).order('id', { ascending: false }).limit(200));
+      return rows.reverse().map(m => Object.assign(m, { mine: m.author && m.author.id === u }));
+    },
+    async gcSend(g, body) { const u = await me(); body = String(body || '').trim(); if (!body) return; const { error } = await sb.from('gc_messages').insert({ group_id: g, author_id: u, body: body.slice(0, 2000) }); if (error) throw err(/row-level/i.test(error.message) ? 'You are not in this group.' : error.message); return true; },
+    async gcDelete(id) { await q(sb.from('gc_messages').delete().eq('id', id)); },
     async ambDelete(id) { await q(sb.from('amb_messages').delete().eq('id', id)); },
     async createShare(name, song) { return q(sb.rpc('create_share', { n: name, s: song })); },
     async getShare(code) { return q(sb.rpc('get_share', { c: code })); },

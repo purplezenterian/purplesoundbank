@@ -243,28 +243,58 @@
     { const auto = A.autoSong; A.autoSong = false; let tries = 0; const fr = wrap.querySelector('iframe'); const iv = setInterval(() => { try { const d = fr.contentDocument; const pb = d && [...d.querySelectorAll('button')].find(b => b.textContent.trim() === 'Perform'); if (pb) pb.click(); if (firstRun && !auto) { if (pb) clearInterval(iv); return; } const row = auto ? (d && d.querySelector('.song.on')) : (d && [...d.querySelectorAll('.song')].find(x => { const n = x.querySelector('.nm'); return n && /^\s*basic worship\s*$/i.test(n.textContent); })); if (row) { if (auto || !row.classList.contains('on')) row.click(); clearInterval(iv); } } catch (e) {} if (++tries > 40) clearInterval(iv); }, 500); }
   };
 
-  /* ---------- Ambassadors: private room ---------- */
-  R.ambassadors = async () => {
-    if (!(S.profile && (S.profile.is_admin || A.isAmb(S.profile)))) return A.go('#/hub');
-    A.setTitle('Ambassadors');
-    const list = h('div', { class: 'amb-list', style: 'display:flex;flex-direction:column;gap:10px;max-height:60vh;overflow-y:auto;padding:4px 2px' });
-    const ta = h('textarea', { rows: 2, maxlength: 2000, placeholder: 'Message the Ambassadors\u2026', style: 'width:100%' });
+  /* ---------- Ambassadors: private room + group chats ---------- */
+  function chatBox(load, send, del) {
+    const list = h('div', { style: 'display:flex;flex-direction:column;gap:10px;max-height:55vh;overflow-y:auto;padding:4px 2px' });
+    const ta = h('textarea', { rows: 2, maxlength: 2000, placeholder: 'Write a message…', style: 'width:100%' });
     let last = '', busy = false;
-    const draw = async (force) => {
-      let rows; try { rows = await api.ambMessages(); } catch (e) { return; }
+    const draw = async force => {
+      let rows; try { rows = await load(); } catch (e) { return; }
       const sig = rows.map(r => r.id).join(','); if (sig === last && !force) return; last = sig;
       const atEnd = list.scrollHeight - list.scrollTop - list.clientHeight < 80;
       list.replaceChildren(...(rows.length ? rows.map(m => h('div', { class: 'card', style: 'padding:10px 14px' + (m.mine ? ';border-color:var(--glow)' : '') },
-        h('div', { class: 'meta' }, A.who(m.author), h('span', null, A.ago(m.created_at)), (m.mine || (S.profile && S.profile.is_admin)) ? h('button', { class: 'btn small', style: 'margin-left:auto', onclick: async () => { try { await api.ambDelete(m.id); draw(true); } catch (e) { A.fail(e); } } }, 'Delete') : null),
-        h('div', { style: 'white-space:pre-wrap;margin-top:4px' }, m.body))) : [h('div', { class: 'empty' }, 'No messages yet. Say hi to the other Ambassadors.')]));
+        h('div', { class: 'meta' }, A.who(m.author), h('span', null, A.ago(m.created_at)), (m.mine || (S.profile && S.profile.is_admin)) ? h('button', { class: 'btn small', style: 'margin-left:auto', onclick: async () => { try { await del(m.id); draw(true); } catch (e) { A.fail(e); } } }, 'Delete') : null),
+        h('div', { style: 'white-space:pre-wrap;margin-top:4px' }, m.body))) : [h('div', { class: 'empty' }, 'No messages yet. Say hi.')]));
       if (atEnd || force) list.scrollTop = list.scrollHeight;
     };
-    const send = async () => { if (busy || !ta.value.trim()) return; busy = true; try { await api.ambSend(ta.value); ta.value = ''; await draw(true); } catch (e) { A.fail(e); } busy = false; };
-    ta.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } });
-    A.render(h('div', { class: 'card mid' }, h('h2', { style: 'margin:0 0 4px' }, '\u2605 Ambassadors'), h('p', { class: 'muted small', style: 'margin:0 0 12px' }, 'A private room. Only Ambassadors can see this.'), list,
-      h('div', { style: 'margin-top:12px;display:flex;flex-direction:column;gap:8px' }, ta, h('div', null, h('button', { class: 'btn primary', onclick: send }, 'Send')))));
-    await draw(true);
-    A.timers.push(setInterval(() => draw(false), 5000));
+    const go = async () => { if (busy || !ta.value.trim()) return; busy = true; try { await send(ta.value); ta.value = ''; await draw(true); } catch (e) { A.fail(e); } busy = false; };
+    ta.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); go(); } });
+    const node = h('div', null, list, h('div', { style: 'margin-top:12px;display:flex;flex-direction:column;gap:8px' }, ta, h('div', null, h('button', { class: 'btn primary', onclick: go }, 'Send'))));
+    return { node, start: async () => { await draw(true); A.timers.push(setInterval(() => draw(false), 5000)); } };
+  }
+  R.ambassadors = async segs => {
+    if (!(S.profile && (S.profile.is_admin || A.isAmb(S.profile)))) return A.go('#/hub');
+    A.setTitle('Ambassadors');
+    const tabs = on => h('div', { class: 'tabs', role: 'tablist' }, h('a', { class: 'tab' + (on === 'room' ? ' on' : ''), href: '#/ambassadors' }, 'Everyone'), h('a', { class: 'tab' + (on === 'groups' ? ' on' : ''), href: '#/ambassadors/groups' }, 'Group chats'));
+    const head = (sub, on) => [h('h2', { style: 'margin:0 0 4px' }, '★ Ambassadors'), h('p', { class: 'muted small', style: 'margin:0 0 12px' }, sub), tabs(on)];
+    if (segs[0] === 'g') {                                   // one group chat
+      const gid = Number(segs[1]); const gs = await api.gcList(); const g = gs.find(x => x.id === gid);
+      if (!g) return A.render(h('div', { class: 'card mid' }, ...head('', 'groups'), h('div', { class: 'empty' }, 'That group is gone or you are not in it.')));
+      const meOwner = g.members.some(m => m.is_owner && m.user.id === S.profile.id);
+      const cb = chatBox(() => api.gcMessages(gid), b => api.gcSend(gid, b), id => api.gcDelete(id));
+      const addBox = h('div');
+      const people = await api.ambPeople(); const addable = people.filter(p => !g.members.some(m => m.user.id === p.id));
+      if (meOwner && addable.length) { const sel = h('select', null, addable.map(p => h('option', { value: p.id }, p.display_name || p.username))); addBox.append(h('div', { class: 'row', style: 'gap:8px;margin-top:10px' }, sel, h('button', { class: 'btn small', onclick: async () => { try { await api.gcAdd(gid, sel.value); R.ambassadors(segs); } catch (e) { A.fail(e); } } }, 'Add')));}
+      A.render(h('div', { class: 'card mid' }, ...head('A private group.', 'groups'),
+        h('div', { class: 'row', style: 'justify-content:space-between;margin:6px 0 10px' }, h('h3', { style: 'margin:0' }, g.name), h('span', null, h('a', { class: 'btn small', href: '#/ambassadors/groups', style: 'margin-right:6px' }, 'All groups'), h('button', { class: 'btn small danger', onclick: async () => { try { await api.gcLeave(gid); A.go('#/ambassadors/groups'); } catch (e) { A.fail(e); } } }, 'Leave'))),
+        h('p', { class: 'muted small', style: 'margin:0 0 10px' }, 'Members: ' + g.members.map(m => (m.user.display_name || m.user.username)).join(', ')), cb.node, addBox));
+      return cb.start();
+    }
+    if (segs[0] === 'groups') {                              // group list + new group
+      const gs = await api.gcList(); const people = await api.ambPeople();
+      const name = h('input', { type: 'text', maxlength: 60, placeholder: 'Group name' });
+      const picks = people.map(p => ({ p, box: h('input', { type: 'checkbox' }) }));
+      const make = async () => { try { const id = await api.gcCreate(name.value, picks.filter(x => x.box.checked).map(x => x.p.id)); A.go('#/ambassadors/g/' + id); } catch (e) { A.fail(e); } };
+      A.render(h('div', { class: 'card mid' }, ...head('Group chats, just for Ambassadors.', 'groups'),
+        gs.length ? gs.map(g => h('a', { class: 'post', href: '#/ambassadors/g/' + g.id }, h('h3', null, g.name), h('p', { class: 'muted small' }, g.members.length + ' members: ' + g.members.map(m => m.user.display_name || m.user.username).join(', ')))) : h('div', { class: 'empty' }, 'No groups yet. Start one below.'),
+        h('h3', { style: 'margin:18px 0 8px' }, 'New group'), name,
+        h('div', { style: 'margin:10px 0;display:flex;flex-direction:column;gap:6px' }, people.length ? picks.map(x => h('label', { style: 'display:flex;gap:8px;align-items:center' }, x.box, x.p.display_name || x.p.username)) : h('p', { class: 'muted small' }, 'No other Ambassadors yet. You can make the group now and add people later.')),
+        h('button', { class: 'btn primary', onclick: make }, 'Create group')));
+      return;
+    }
+    const cb = chatBox(() => api.ambMessages(), b => api.ambSend(b), id => api.ambDelete(id));
+    A.render(h('div', { class: 'card mid' }, ...head('A private room. Only Ambassadors can see this.', 'room'), cb.node));
+    await cb.start();
   };
 
   /* ---------- one-tap export of this browser's instrument settings ---------- */
