@@ -66,6 +66,7 @@
     S.sub = await api.getSubscription();
     S.profile = await api.me();
     try { A.ambNames = (await api.ambassadorNames() || []).map(x => String(x).toLowerCase()); } catch (e) { A.ambNames = A.ambNames || []; }
+    try { S.hasGc = (await api.gcList()).length > 0; } catch (e) { S.hasGc = false; }
     if (!S.blocker) await refreshCounts();
   }
   async function refreshCounts() { if (!A.isMember()) return; try { S.counts = await api.counts(); renderNav(); } catch (e) { /* ignore */ } }
@@ -92,6 +93,7 @@
     if (S.session && !S.blocker && A.isMember()) {
       links = [link('#/hub', 'Hub', 'hub'),
         S.profile && (S.profile.is_admin || A.isAmb(S.profile)) ? link('#/ambassadors', '\u2605 Ambassadors', 'ambassadors') : null,
+        S.profile && !(S.profile.is_admin || A.isAmb(S.profile)) && S.hasGc ? link('#/ambassadors/groups', 'Group chats', 'ambassadors') : null,
         S.profile && S.profile.is_admin ? link('#/admin', 'Admin', 'admin') : null, link('#/account', 'Account', 'account')];
     } else if (S.session) {
       links = [link('#/pricing', 'Membership', 'pricing'), link('#/account', 'Account', 'account')];

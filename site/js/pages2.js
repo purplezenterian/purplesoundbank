@@ -262,10 +262,12 @@
     const node = h('div', null, list, h('div', { style: 'margin-top:12px;display:flex;flex-direction:column;gap:8px' }, ta, h('div', null, h('button', { class: 'btn primary', onclick: go }, 'Send'))));
     return { node, start: async () => { await draw(true); A.timers.push(setInterval(() => draw(false), 5000)); } };
   }
+  const gcPeople = async () => { const amb = await api.ambPeople(); let fr = []; try { fr = ((await api.listFriends()).friends || []).map(f => f.user); } catch (e) {} const seen = new Set(), out = []; amb.concat(fr).forEach(p => { if (p && !seen.has(p.id)) { seen.add(p.id); out.push(p); } }); return out; };
   R.ambassadors = async segs => {
-    if (!(S.profile && (S.profile.is_admin || A.isAmb(S.profile)))) return A.go('#/hub');
+    const isA = !!(S.profile && (S.profile.is_admin || A.isAmb(S.profile)));
+    if (!isA && !(S.hasGc && (segs[0] === 'g' || segs[0] === 'groups'))) return A.go('#/hub');
     A.setTitle('Ambassadors');
-    const tabs = on => h('div', { class: 'tabs', role: 'tablist' }, h('a', { class: 'tab' + (on === 'room' ? ' on' : ''), href: '#/ambassadors' }, 'Everyone'), h('a', { class: 'tab' + (on === 'groups' ? ' on' : ''), href: '#/ambassadors/groups' }, 'Group chats'));
+    const tabs = on => h('div', { class: 'tabs', role: 'tablist' }, (isA ? h('a', { class: 'tab' + (on === 'room' ? ' on' : ''), href: '#/ambassadors' }, 'Everyone') : null), h('a', { class: 'tab' + (on === 'groups' ? ' on' : ''), href: '#/ambassadors/groups' }, 'Group chats'));
     const head = (sub, on) => [h('h2', { style: 'margin:0 0 4px' }, '★ Ambassadors'), h('p', { class: 'muted small', style: 'margin:0 0 12px' }, sub), tabs(on)];
     if (segs[0] === 'g') {                                   // one group chat
       const gid = Number(segs[1]); const gs = await api.gcList(); const g = gs.find(x => x.id === gid);
@@ -273,7 +275,7 @@
       const meOwner = g.members.some(m => m.is_owner && m.user.id === S.profile.id);
       const cb = chatBox(() => api.gcMessages(gid), b => api.gcSend(gid, b), id => api.gcDelete(id));
       const addBox = h('div');
-      const people = await api.ambPeople(); const addable = people.filter(p => !g.members.some(m => m.user.id === p.id));
+      const people = await gcPeople(); const addable = people.filter(p => !g.members.some(m => m.user.id === p.id));
       if (meOwner && addable.length) { const sel = h('select', null, addable.map(p => h('option', { value: p.id }, p.display_name || p.username))); addBox.append(h('div', { class: 'row', style: 'gap:8px;margin-top:10px' }, sel, h('button', { class: 'btn small', onclick: async () => { try { await api.gcAdd(gid, sel.value); R.ambassadors(segs); } catch (e) { A.fail(e); } } }, 'Add')));}
       A.render(h('div', { class: 'card mid' }, ...head('A private group.', 'groups'),
         h('div', { class: 'row', style: 'justify-content:space-between;margin:6px 0 10px' }, h('h3', { style: 'margin:0' }, g.name), h('span', null, h('a', { class: 'btn small', href: '#/ambassadors/groups', style: 'margin-right:6px' }, 'All groups'), h('button', { class: 'btn small danger', onclick: async () => { try { await api.gcLeave(gid); A.go('#/ambassadors/groups'); } catch (e) { A.fail(e); } } }, 'Leave'))),
@@ -281,15 +283,15 @@
       return cb.start();
     }
     if (segs[0] === 'groups') {                              // group list + new group
-      const gs = await api.gcList(); const people = await api.ambPeople();
+      const gs = await api.gcList(); const people = isA ? await gcPeople() : [];
       const name = h('input', { type: 'text', maxlength: 60, placeholder: 'Group name' });
       const picks = people.map(p => ({ p, box: h('input', { type: 'checkbox' }) }));
       const make = async () => { try { const id = await api.gcCreate(name.value, picks.filter(x => x.box.checked).map(x => x.p.id)); A.go('#/ambassadors/g/' + id); } catch (e) { A.fail(e); } };
       A.render(h('div', { class: 'card mid' }, ...head('Group chats, just for Ambassadors.', 'groups'),
         gs.length ? gs.map(g => h('a', { class: 'post', href: '#/ambassadors/g/' + g.id }, h('h3', null, g.name), h('p', { class: 'muted small' }, g.members.length + ' members: ' + g.members.map(m => m.user.display_name || m.user.username).join(', ')))) : h('div', { class: 'empty' }, 'No groups yet. Start one below.'),
-        h('h3', { style: 'margin:18px 0 8px' }, 'New group'), name,
-        h('div', { style: 'margin:10px 0;display:flex;flex-direction:column;gap:6px' }, people.length ? picks.map(x => h('label', { style: 'display:flex;gap:8px;align-items:center' }, x.box, x.p.display_name || x.p.username)) : h('p', { class: 'muted small' }, 'No other Ambassadors yet. You can make the group now and add people later.')),
-        h('button', { class: 'btn primary', onclick: make }, 'Create group')));
+        isA ? h('h3', { style: 'margin:18px 0 8px' }, 'New group') : null, isA ? name : null,
+        isA ? h('div', { style: 'margin:10px 0;display:flex;flex-direction:column;gap:6px' }, people.length ? picks.map(x => h('label', { style: 'display:flex;gap:8px;align-items:center' }, x.box, x.p.display_name || x.p.username)) : h('p', { class: 'muted small' }, 'No Ambassadors or friends to add yet. You can make the group now and add people later.')) : null,
+        isA ? h('button', { class: 'btn primary', onclick: make }, 'Create group') : null));
       return;
     }
     const cb = chatBox(() => api.ambMessages(), b => api.ambSend(b), id => api.ambDelete(id));
