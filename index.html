@@ -2402,13 +2402,14 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
       M.stream = null; M.vid = null; M.cv = null; M.busy = false; B.mirror = 'off'; B.onChange();
     };
     M.frame = () => {
-      if (M.busy || !ws || ws.readyState !== 1 || ws.bufferedAmount > 600000 || !M.vid || !M.vid.videoWidth) return;
+      if (M.busy || !ws || ws.readyState !== 1 || ws.bufferedAmount > 600000 || !M.vid || !M.vid.videoWidth || M.vid.readyState < 2) return;
+      const ct = M.vid.currentTime; if (ct === M.lastT && M.sent > 0 && Date.now() - M.lastSend < 1000) return; M.lastT = ct;
       const vw = M.vid.videoWidth, vh = M.vid.videoHeight, w = Math.min(M.want, vw), h = Math.round(w * vh / vw);
       if (M.cv.width !== w || M.cv.height !== h) { M.cv.width = w; M.cv.height = h; }
-      M.cv.getContext('2d').drawImage(M.vid, 0, 0, w, h);
+      const g2 = M.cv.getContext('2d', { alpha: false }); g2.fillStyle = '#07040f'; g2.fillRect(0, 0, w, h); g2.drawImage(M.vid, 0, 0, w, h);
       M.busy = true;
       M.cv.toBlob(async b => {
-        try { if (b && ws && ws.readyState === 1) { const u = new Uint8Array(await b.arrayBuffer()), o = new Uint8Array(u.length + 1); o[0] = 2; o.set(u, 1); ws.send(o.buffer); } } catch (e) {}
+        try { if (b && ws && ws.readyState === 1) { const u = new Uint8Array(await b.arrayBuffer()), o = new Uint8Array(u.length + 1); o[0] = 2; o.set(u, 1); ws.send(o.buffer); M.sent = (M.sent || 0) + 1; M.lastSend = Date.now(); } } catch (e) {}
         M.busy = false;
       }, 'image/jpeg', M.quality);
     };

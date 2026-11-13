@@ -2,6 +2,7 @@
 
 PSBBridgeEditor::PSBBridgeEditor (PSBBridgeProcessor& p) : AudioProcessorEditor (&p), proc (p)
 {
+    setOpaque (true);
     setResizable (true, true);
     setResizeLimits (480, 300, 2400, 1600);
     setSize (900, 560);
@@ -31,8 +32,8 @@ void PSBBridgeEditor::timerCallback()
     if (c && ! wasConnected) sendView();
     wasConnected = c;
     const auto seq = proc.frameCount();
-    if (seq != lastSeq) { lastSeq = seq; shown = proc.latestFrame(); }
-    repaint();
+    if (seq != lastSeq) { lastSeq = seq; shown = proc.latestFrame(); repaint(); return; }
+    if (! shown.isValid()) repaint();   // status screen only: keeps the level meter moving
 }
 
 void PSBBridgeEditor::send (const char* kind, const juce::MouseEvent& e, float dy)
