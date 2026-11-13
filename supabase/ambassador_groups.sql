@@ -58,7 +58,7 @@ begin
   insert into public.gc_groups (name, created_by) values (left(n, 60), auth.uid()) returning id into g;
   insert into public.gc_members (group_id, user_id, is_owner) values (g, auth.uid(), true);
   insert into public.gc_members (group_id, user_id)
-    select p.id, p.id from public.ambassador_people p where p.id = any(coalesce(ids, '{}')) and p.id <> auth.uid()
+    select g, p.id from public.ambassador_people p where p.id = any(coalesce(ids, '{}')) and p.id <> auth.uid()
     on conflict do nothing;
   return g;
 end $$;
