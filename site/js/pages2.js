@@ -180,14 +180,18 @@
       status.textContent = 'Confirming your payment…'; history.replaceState(null, '', '#/play');
       for (let i = 0; i < 12; i++) { try { const sb = await api.getSubscription(); if (sb && sb.status === 'active') break; } catch (e) {} await new Promise(r => setTimeout(r, 1500)); }
     }
-    let url = await api.instrumentUrl(), src = url, srcdoc = null, blobUrl = null;
-    if (C.mode !== 'mock') {
+    let url = null, src = null, srcdoc = null, blobUrl = null;
+    if (A.offlinePlay) {                       // no signal: use the saved copy (Ambassadors, 14 day pass)
+      srcdoc = await A.offline.load(); if (!srcdoc) { A.render(h('div', { class: 'card narrow center' }, h('h2', null, 'Not saved on this device'), h('p', { class: 'muted' }, 'Open the instrument once while online and it will be ready for next time.'))); return; }
+    } else { url = await api.instrumentUrl(); src = url; }
+    if (!A.offlinePlay && C.mode !== 'mock') {
       const res = await fetch(url); if (!res.ok) throw new Error('Could not load the instrument (' + res.status + ')');
       const total = +res.headers.get('content-length') || 0, rd = res.body.getReader(), parts = []; let got = 0;
       for (;;) { const { done, value } = await rd.read(); if (done) break; parts.push(value); got += value.length; if (total) bar.firstChild.style.width = Math.round(got / total * 100) + '%'; status.textContent = 'Loading sounds… ' + (got / 1048576).toFixed(1) + ' MB'; }
       srcdoc = await new Blob(parts, { type: 'text/html' }).text(); src = null;
+      if (A.offline.eligible(S.profile)) A.offline.save(srcdoc, S.profile).catch(() => {});
     }
-    try { const sl = await api.getSetlist(); if (sl && sl.data && localStorage.getItem('site.setv') !== String(sl.v)) { Object.keys(sl.data).forEach(k => { if (!k.startsWith('psb.') || k === 'psb.did') return;
+    if (!A.offlinePlay) try { const sl = await api.getSetlist(); if (sl && sl.data && localStorage.getItem('site.setv') !== String(sl.v)) { Object.keys(sl.data).forEach(k => { if (!k.startsWith('psb.') || k === 'psb.did') return;
         if (k === 'psb.songs') { let mine = []; try { mine = JSON.parse(localStorage.getItem('psb.songs') || '[]'); } catch (x) {} let pub = []; try { pub = JSON.parse(sl.data[k]); } catch (x) {} const ids = new Set(pub.map(x => x.id)); localStorage.setItem(k, JSON.stringify(pub.concat(mine.filter(x => !ids.has(x.id))))); }
         else if (k === 'psb.curSong') { if (!A.autoSong) localStorage.setItem(k, sl.data[k]); }
         else localStorage.setItem(k, sl.data[k]); }); localStorage.setItem('site.setv', String(sl.v)); } } catch (e) {}

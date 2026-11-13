@@ -167,6 +167,7 @@
 
   async function boot() {
     $('#view').replaceChildren(h('div', { class: 'empty' }, 'Loading…'));
+    if (!navigator.onLine && A.offline && A.offline.pass()) return A.offline.home();
     try {
       if (C.mode === 'live' && (!C.supabaseUrl || !C.supabaseAnonKey)) throw new Error('Live mode needs the Supabase URL and key in js/config.js');
       await api.init();
@@ -175,13 +176,15 @@
       if (fromEmail) { await new Promise(r => setTimeout(r, 400)); history.replaceState(null, '', location.pathname + '#/pricing'); }
       try { await refreshState(); }
       catch (e1) {
+        // No signal (venue wifi with no internet): keep the saved login and use offline mode instead of signing out.
+        if (A.offline && A.offline.pass()) { let up = true; try { const c = new AbortController(); setTimeout(() => c.abort(), 4000); await fetch(C.supabaseUrl + '/auth/v1/health', { mode: 'no-cors', signal: c.signal }); } catch (x) { up = false; } if (!up) throw new Error('offline'); }
         // A stale or rotated login (for example from another tab) must never block the site: clear it and carry on signed out.
         try { await api.signOut(); } catch (x) {}
         try { Object.keys(localStorage).filter(k => /^sb-.*-auth-token$/.test(k)).forEach(k => localStorage.removeItem(k)); } catch (x) {}
         S.session = S.profile = S.sub = null; S.blocker = null;
         await refreshState();
       }
-    } catch (e) { A.render(h('div', { class: 'card narrow' }, h('h2', null, 'Could not start'), h('p', { class: 'msg err' }, e.message), h('button', { class: 'btn', onclick: () => { try { Object.keys(localStorage).filter(k => /^sb-.*-auth-token$/.test(k)).forEach(k => localStorage.removeItem(k)); } catch (x) {} location.reload(); } }, 'Clear and retry'))); return; }
+    } catch (e) { if (A.offline && A.offline.pass() && (!navigator.onLine || /offline|fetch|network|sign-in service|connection/i.test(e.message))) return A.offline.home(); A.render(h('div', { class: 'card narrow' }, h('h2', null, 'Could not start'), h('p', { class: 'msg err' }, e.message), h('button', { class: 'btn', onclick: () => { try { Object.keys(localStorage).filter(k => /^sb-.*-auth-token$/.test(k)).forEach(k => localStorage.removeItem(k)); } catch (x) {} location.reload(); } }, 'Clear and retry'))); return; }
     demoBar(); window.addEventListener('hashchange', route); route();
     setInterval(heartbeat, 30000); setInterval(refreshCounts, 15000);
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') heartbeat(); });
