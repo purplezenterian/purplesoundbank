@@ -38,7 +38,7 @@
     const b = h('span', { title: 'Admin', style: 'display:inline-flex;vertical-align:middle;margin-left:5px;filter:drop-shadow(0 0 4px rgba(139,61,255,.8))' }); b.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" aria-label="Admin" role="img"><path fill="#8b3dff" d="M12 1.5l2.4 1.7 2.9-.2 1.2 2.6 2.6 1.2-.2 2.9L22.5 12l-1.7 2.4.2 2.9-2.6 1.2-1.2 2.6-2.9-.2L12 22.5l-2.4-1.7-2.9.2-1.2-2.6L2.9 15.2l.2-2.9L1.5 12l1.7-2.4-.2-2.9 2.6-1.2 1.2-2.6 2.9.2z"/><path fill="#fff" d="M7 15.5l-.9-5.2 3.1 2.4L12 8.2l2.8 4.5 3.1-2.4-.9 5.2z"/><rect x="7" y="16.3" width="10" height="1.5" rx=".7" fill="#fff"/></svg>'; return b; };
   A.who = u => h('a', { class: 'who', href: '#/u/' + u.username }, A.avatar(u, 'sm'), u.display_name || u.username, A.badge(u));
   A.go = hash => { if (location.hash === hash) route(); else location.hash = hash; };
-  A.isMember = () => !!(S.sub && ['trialing', 'active'].includes(S.sub.status) && !S.blocker);
+  A.isMember = () => !!(S.profile && S.profile.is_admin) || !!(S.sub && ['trialing', 'active'].includes(S.sub.status) && !S.blocker);
   A.setTitle = t => { document.title = t ? t + ' · ' + C.siteName : C.siteName; };
   A.every = (fn, ms) => { const id = setInterval(fn, ms); A.timers.push(id); return id; };
   A.render = (...nodes) => { const v = $('#view'); v.replaceChildren(...nodes.flat().filter(Boolean)); window.scrollTo(0, 0); };
@@ -65,6 +65,7 @@
     else if (r.status === 'too_many_devices') S.blocker = { type: 'toomany' };
     S.sub = await api.getSubscription();
     S.profile = await api.me();
+    if (S.profile && S.profile.is_admin) S.blocker = null;        // the admin account has no device, plan or one-at-a-time limits
     try { A.ambNames = (await api.ambassadorNames() || []).map(x => String(x).toLowerCase()); } catch (e) { A.ambNames = A.ambNames || []; }
     try { S.hasGc = (await api.gcList()).length > 0; } catch (e) { S.hasGc = false; }
     if (!S.blocker) await refreshCounts();
@@ -81,7 +82,7 @@
   }
   async function heartbeat() {
     if (!S.session || S.blocker) return;
-    try { const r = await api.heartbeat(); if (r.kicked) kicked(); } catch (e) { /* network blip */ }
+    try { const r = await api.heartbeat(); if (r.kicked && !(S.profile && S.profile.is_admin)) kicked(); } catch (e) { /* network blip */ }
   }
 
   /* ---------- navigation ---------- */
