@@ -79,6 +79,8 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
 #slotMenu { position: fixed; inset: 0; z-index: 60; display: none; align-items: flex-start; justify-content: center; padding-top: 70px; background: rgba(2,1,6,.72); }
 #slotMenu.open { display: flex; }
 #slotMenu .sheet { width: min(340px, calc(100vw - 32px)); max-height: calc(100vh - 110px); overflow: auto; background: #0b0813; border: 1px solid var(--glow); border-radius: 14px; padding: 12px; box-shadow: 0 0 30px rgba(var(--glow-rgb), .5); }
+#slotMenu .psearch { position: sticky; top: -12px; z-index: 1; margin: -12px -12px 4px; padding: 12px 12px 8px; background: #0b0813; }
+#slotMenu .psearch h3 { margin: 0 0 8px; }
 #slotMenu h3 { margin: 0 0 8px; font: 700 11px var(--font-display, inherit); letter-spacing: .18em; text-transform: uppercase; color: #b79cff; }
 #slotMenu .sub { margin: 10px 0 4px; font: 600 10px var(--font-display, inherit); letter-spacing: .14em; text-transform: uppercase; color: var(--faint); }
 #slotMenu .opt { display: flex; justify-content: space-between; align-items: center; width: 100%; text-align: left; background: none; border: 0; border-radius: 6px; padding: 9px 8px; color: #cdb8ff; font: 600 13px var(--font-display, inherit); cursor: pointer; }
@@ -1088,7 +1090,11 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
   function openSlotMenu(i) {
     const cur = slotCh(i);
     const sheet = document.createElement('div'); sheet.className = 'sheet';
-    const h = document.createElement('h3'); h.textContent = 'Slot ' + (i + 1) + (cur ? ' · ' + cur.name : ' · empty'); sheet.appendChild(h);
+    const h = document.createElement('h3'); h.textContent = 'Slot ' + (i + 1) + (cur ? ' · ' + cur.name : ' · empty');
+    // Search stays pinned at the top so a long list of sounds is quick to get through.
+    const top = document.createElement('div'); top.className = 'psearch';
+    const q = document.createElement('input'); q.type = 'search'; q.className = 'lib-search'; q.placeholder = 'SEARCH SOUNDS'; q.setAttribute('aria-label', 'Search sounds'); q.autocomplete = 'off';
+    top.append(h, q); sheet.appendChild(top);
     const add = (label, tag, cls, fn) => {
       const b = document.createElement('button'); b.type = 'button'; b.className = 'opt' + (cls ? ' ' + cls : '');
       const s1 = document.createElement('span'); s1.textContent = label; b.appendChild(s1);
@@ -1098,13 +1104,25 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
     };
     if (cur) add('Remove from bar', '', 'rm', () => removeFromBar(cur));
     const sub = document.createElement('div'); sub.className = 'sub'; sub.textContent = cur ? 'Swap in' : 'Put here'; sheet.appendChild(sub);
+    const rows = [];
     for (const c of channels) {
       const at = onBar(c) ? order.indexOf(c.id) : -1;
       add(c.name, c === cur ? 'here' : (at >= 0 ? 'slot ' + (at + 1) + ' · swap' : 'off bar'), c === cur ? 'here' : '', () => { if (c !== cur) placeOnBar(c, i); });
+      const row = sheet.lastChild; row.dataset.find = (c.name + ' ' + (c.cat || '')).toLowerCase(); rows.push(row);
     }
+    const none = document.createElement('div'); none.className = 'sub'; none.textContent = 'No sounds match'; none.style.display = 'none'; sheet.appendChild(none);
+    const applyFind = () => {
+      const words = q.value.toLowerCase().split(/\s+/).filter(Boolean); let n = 0;
+      for (const r of rows) { const ok = words.every(w => r.dataset.find.includes(w)); r.style.display = ok ? '' : 'none'; if (ok) n++; }
+      none.style.display = n ? 'none' : '';
+      sub.style.display = words.length ? 'none' : '';
+    };
+    q.addEventListener('input', applyFind);
+    q.addEventListener('keydown', e => { if (e.key === 'Enter') { const first = rows.find(r => r.style.display !== 'none'); if (first) first.click(); } });
     const sub2 = document.createElement('div'); sub2.className = 'sub'; sub2.textContent = 'Layout'; sheet.appendChild(sub2);
     add('Reset to original order', '', '', () => { order = channels.map(c => c.id); off.clear(); layoutChanged(); });
     menuEl.textContent = ''; menuEl.appendChild(sheet); menuEl.classList.add('open');
+    try { if (matchMedia('(hover: hover)').matches) q.focus(); } catch (_) {}
   }
   // Hold a pad until it lifts: drop it on another pad to swap places, or let go in place for the menu.
   {
