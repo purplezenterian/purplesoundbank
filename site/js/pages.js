@@ -116,7 +116,7 @@
     const startBtn = !active ? h('button', { class: 'btn primary', onclick: startCheckout }, prof.trial_used ? 'Subscribe for ' + C.price + ' a month' : 'Start your free month') : null;
     A.render(h('h1', { style: 'font-size:32px' }, 'Your account'), ok ? h('div', { class: 'msg ok' }, 'You are in! Welcome to the hub.') : null,
       h('div', { class: 'grid g2' },
-        h('div', { class: 'card' }, h('h3', null, 'Profile'), h('div', { class: 'row', style: 'margin-bottom:12px' }, A.avatar(prof, 'lg'), h('div', null, h('b', null, prof.display_name || prof.username), h('div', { class: 'muted small' }, '@' + prof.username))), h('a', { class: 'btn small', href: '#/u/' + prof.username }, 'Edit profile')),
+        h('div', { class: 'card' }, h('h3', null, 'Profile'), h('div', { class: 'row', style: 'margin-bottom:12px' }, A.avatar(prof, 'lg'), h('div', null, h('b', null, prof.display_name || prof.username, A.badge(prof)), h('div', { class: 'muted small' }, '@' + prof.username))), h('a', { class: 'btn small', href: '#/u/' + prof.username }, 'Edit profile')),
         h('div', { class: 'card' }, h('h3', null, 'Membership'), status, h('div', { class: 'row' }, startBtn, billingBtn)),
         h('div', { class: 'card' }, h('h3', null, 'Your devices'), h('p', { class: 'small muted' }, 'Up to 3 devices, one in use at a time. Signing in on another device signs this one out.'),
           devices.map(d => h('div', { class: 'list-row' }, h('div', { class: 'grow' }, d.label || 'Device', d.current ? h('span', { class: 'pill', style: 'margin-left:8px' }, 'This device') : null), h('span', { class: 'small muted' }, A.ago(d.last_seen)))), h('details', { style: 'margin-top:12px' }, h('summary', null, 'I changed phone or computer'), A.resetForm())),

@@ -1,6 +1,7 @@
 // The only file you need to edit to switch the site from demo mode to live.
 window.PSB_CONFIG = {
   mode: 'live',                       // 'mock' = demo with fake data in your browser  |  'live' = real accounts and payments
+  ambassadors: ['tg123'],             // usernames that get the black star (Ambassador) next to their name
   siteName: 'Purple SoundBank',
   price: '£5',
   supabaseUrl: 'https://qfwfwypkpzonsajhxeaz.supabase.co',                    // e.g. https://abcdxyz.supabase.co   (live mode only)

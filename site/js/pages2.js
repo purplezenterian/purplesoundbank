@@ -95,7 +95,7 @@
     A.setTitle(u.display_name || u.username);
     const mine = u.id === meId(); const card = h('div', { class: 'card mid' });
     A.render(card);
-    const head = () => h('div', { class: 'row', style: 'gap:16px;margin-bottom:14px' }, A.avatar(u, 'lg'), h('div', null, h('h1', { style: 'font-size:28px;margin:0' }, u.display_name || u.username), h('div', { class: 'muted' }, '@' + u.username + ' · joined ' + A.date(u.created_at))));
+    const head = () => h('div', { class: 'row', style: 'gap:16px;margin-bottom:14px' }, A.avatar(u, 'lg'), h('div', null, h('h1', { style: 'font-size:28px;margin:0' }, u.display_name || u.username, A.badge(u)), h('div', { class: 'muted' }, '@' + u.username + ' · joined ' + A.date(u.created_at))));
     if (mine) {
       let color = u.avatar_color;
       const sw = h('div', { class: 'row', style: 'margin-bottom:12px' }, COLORS.map(c => h('button', { type: 'button', 'aria-label': 'Colour ' + c, style: 'width:30px;height:30px;border-radius:50%;border:2px solid ' + (c === color ? '#fff' : 'transparent') + ';background:' + c + ';cursor:pointer', onclick: ev => { color = c; [...sw.children].forEach(b => b.style.borderColor = 'transparent'); ev.currentTarget.style.borderColor = '#fff'; } })));
