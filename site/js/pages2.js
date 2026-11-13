@@ -246,7 +246,7 @@
   /* ---------- Admin: people and who is online ---------- */
   R.people = async () => {
     if (!(S.profile && S.profile.is_admin)) return A.go('#/hub');
-    A.setTitle('People');
+    A.setTitle('Members');
     const sum = h('div', { class: 'row', style: 'gap:10px;flex-wrap:wrap;margin-bottom:14px' }), onl = h('div'), all = h('div');
     const q = h('input', { type: 'text', placeholder: 'Search name or email', style: 'width:100%;margin-bottom:10px' });
     let rows = [], plan = 'all';
@@ -269,7 +269,7 @@
     };
     const load = async () => { try { rows = await api.adminPeople(); paint(); } catch (e) { onl.replaceChildren(h('div', { class: 'empty' }, 'Could not load: ' + ((e && e.message) || 'error'))); } };
     q.addEventListener('input', paint);
-    A.render(h('div', { class: 'mid' }, h('h1', { style: 'font-size:30px' }, 'People'), h('p', { class: 'small muted' }, 'Updates every 5 seconds. Online means the hub was open in the last 90 seconds.'), sum, chips, q, onl, all));
+    A.render(h('div', { class: 'mid' }, h('h1', { style: 'font-size:30px' }, 'Members'), h('p', { class: 'small muted' }, 'Updates every 5 seconds. Online means the hub was open in the last 90 seconds.'), sum, chips, q, onl, all));
     await load(); A.timers.push(setInterval(load, 5000));
   };
 
