@@ -79,6 +79,24 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
 #slotMenu { position: fixed; inset: 0; z-index: 60; display: none; align-items: flex-start; justify-content: center; padding-top: 70px; background: rgba(2,1,6,.72); }
 #slotMenu.open { display: flex; }
 #slotMenu .sheet { width: min(340px, calc(100vw - 32px)); max-height: calc(100vh - 110px); overflow: auto; background: #0b0813; border: 1px solid var(--glow); border-radius: 14px; padding: 12px; box-shadow: 0 0 30px rgba(var(--glow-rgb), .5); }
+.chips { display: flex; gap: 8px; align-items: center; }
+#daw-chip.rec .dot { background: #ff4d6d; box-shadow: 0 0 8px #ff4d6d; }
+#daw-chip.rec .txt::after { content: " · REC"; }
+#dawMenu { position: fixed; inset: 0; z-index: 61; display: none; align-items: flex-start; justify-content: center; padding-top: 60px; background: rgba(2,1,6,.78); }
+#dawMenu.open { display: flex; }
+#dawMenu .sheet { width: min(420px, calc(100vw - 32px)); max-height: calc(100vh - 90px); overflow: auto; background: #0b0813; border: 1px solid var(--glow); border-radius: 14px; padding: 16px; box-shadow: 0 0 30px rgba(var(--glow-rgb), .5); }
+#dawMenu h3 { margin: 0 0 10px; font: 700 11px var(--font-display, inherit); letter-spacing: .18em; text-transform: uppercase; color: #b79cff; }
+#dawMenu .sub { margin: 14px 0 6px; font: 600 10px var(--font-display, inherit); letter-spacing: .14em; text-transform: uppercase; color: var(--faint); }
+#dawMenu p { margin: 0 0 8px; font: 12px/1.5 var(--font-display, inherit); color: #a894d8; }
+#dawMenu .row { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0; }
+#dawMenu .big { flex: 1 1 140px; min-height: 40px; border-radius: 8px; border: 1px solid #3a2a63; background: #150f26; color: #e6d9ff; font: 700 12px var(--font-display, inherit); letter-spacing: .06em; cursor: pointer; padding: 0 12px; }
+#dawMenu .big:hover { border-color: #9b5cff; background: #1d1438; }
+#dawMenu .big.go { background: #6d2cf0; border-color: #9b5cff; color: #fff; }
+#dawMenu .big.stop { background: #d6335a; border-color: #ff6b8a; color: #fff; }
+#dawMenu .big[disabled] { opacity: .4; cursor: default; }
+#dawMenu .stat { font: 600 12px var(--font-display, inherit); color: #cdb8ff; letter-spacing: .06em; }
+#dawMenu .stat b { color: #fff; }
+#dawMenu .x { float: right; background: none; border: 0; color: #8a73c8; font-size: 20px; cursor: pointer; line-height: 1; }
 #slotMenu .psearch { position: sticky; top: -12px; z-index: 1; margin: -12px -12px 4px; padding: 12px 12px 8px; background: #0b0813; }
 #slotMenu .psearch h3 { margin: 0 0 8px; }
 #slotMenu h3 { margin: 0 0 8px; font: 700 11px var(--font-display, inherit); letter-spacing: .18em; text-transform: uppercase; color: #b79cff; }
@@ -260,7 +278,8 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
 
 <div class="top">
   <div class="brand"><div class="mark" aria-hidden="true"></div><h1>Purple SoundBank</h1></div>
-  <button class="chip" id="midi-chip" type="button"><span class="dot"></span><span class="txt" id="midi-text">Checking MIDI</span></button>
+  <div class="chips"><button class="chip" id="daw-chip" type="button" aria-label="DAW link: output and recording"><span class="dot"></span><span class="txt">DAW</span></button>
+  <button class="chip" id="midi-chip" type="button"><span class="dot"></span><span class="txt" id="midi-text">Checking MIDI</span></button></div>
 </div>
 <p class="hint" id="hint" hidden>Tap a key to turn the sound on.</p>
 
@@ -2313,6 +2332,110 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
   buildKeys();
   syncLoads();
   initMidi();
+
+  /* ---------- DAW link: choose where the sound goes, and record it clean ---------- */
+  (() => {
+    const chip = $('daw-chip'); if (!chip) return;
+    const panel = document.createElement('div'); panel.id = 'dawMenu'; document.body.appendChild(panel);
+    const rec = { on: false, node: null, mute: null, L: [], R: [], n: 0, t0: 0, peak: 0, notes: [], open: new Map(), wav: null, mid: null, name: '' };
+    // Notes played while recording are kept, so the same take can also be saved as a MIDI file.
+    const _on = noteOn, _off = noteOff;
+    noteOn = function (src) { if (rec.on && !String(src).startsWith('mono:')) rec.open.set(src, { note: arguments[1], vel: arguments[2], t: ctx.currentTime - rec.t0 }); return _on.apply(this, arguments); };
+    noteOff = function (src) { const o = rec.open.get(src); if (rec.on && o) { rec.notes.push({ note: o.note, vel: o.vel, t: o.t, d: Math.max(0.03, ctx.currentTime - rec.t0 - o.t) }); rec.open.delete(src); } return _off.apply(this, arguments); };
+    // Remembered output
+    let sinkLabel = store.get('daw.sinkLabel', '');
+    const canSink = !!(ctx.setSinkId && navigator.mediaDevices && navigator.mediaDevices.selectAudioOutput);
+    (async () => { const id = store.get('daw.sink', ''); if (id && ctx.setSinkId) { try { await ctx.setSinkId(id); } catch (e) { sinkLabel = ''; } } })();
+    let msg = '';
+    const fmtT = s => Math.floor(s / 60) + ':' + String(Math.floor(s % 60)).padStart(2, '0');
+    function startRec() {
+      rec.L = []; rec.R = []; rec.n = 0; rec.peak = 0; rec.notes = []; rec.open.clear(); rec.wav = null; rec.mid = null;
+      const sp = ctx.createScriptProcessor(4096, 2, 2);
+      sp.onaudioprocess = e => {
+        if (!rec.on) return;
+        const l = e.inputBuffer.getChannelData(0), r = e.inputBuffer.getChannelData(e.inputBuffer.numberOfChannels > 1 ? 1 : 0);
+        rec.L.push(new Float32Array(l)); rec.R.push(new Float32Array(r)); rec.n += l.length;
+        for (let i = 0; i < l.length; i++) { const a = Math.max(Math.abs(l[i]), Math.abs(r[i])); if (a > rec.peak) rec.peak = a; }
+      };
+      const z = ctx.createGain(); z.gain.value = 0;
+      outTap.connect(sp); sp.connect(z); z.connect(ctx.destination);
+      rec.node = sp; rec.mute = z; rec.t0 = ctx.currentTime; rec.on = true;
+      rec.name = 'PurpleSoundBank-' + new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+      chip.classList.add('rec'); draw();
+    }
+    function wav24(L, R, n, sr) {
+      const buf = new ArrayBuffer(44 + n * 6), v = new DataView(buf), w = (o, t) => { for (let i = 0; i < t.length; i++) v.setUint8(o + i, t.charCodeAt(i)); };
+      w(0, 'RIFF'); v.setUint32(4, 36 + n * 6, true); w(8, 'WAVE'); w(12, 'fmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 2, true);
+      v.setUint32(24, sr, true); v.setUint32(28, sr * 6, true); v.setUint16(32, 6, true); v.setUint16(34, 24, true); w(36, 'data'); v.setUint32(40, n * 6, true);
+      let o = 44;
+      for (let c = 0; c < L.length; c++) {
+        const a = L[c], b = R[c];
+        for (let i = 0; i < a.length; i++) {
+          for (const x of [a[i], b[i]]) { const q = Math.round(Math.max(-1, Math.min(1, x)) * 8388607); v.setUint8(o, q & 255); v.setUint8(o + 1, (q >> 8) & 255); v.setUint8(o + 2, (q >> 16) & 255); o += 3; }
+        }
+      }
+      return new Blob([buf], { type: 'audio/wav' });
+    }
+    function midi(notes) {
+      const T = 960, vlq = n => { const b = [n & 127]; n >>= 7; while (n) { b.push((n & 127) | 128); n >>= 7; } return b.reverse(); };
+      const ev = []; for (const x of notes) { ev.push([Math.round(x.t * T), 1, x.note, x.vel || 100]); ev.push([Math.round((x.t + x.d) * T), 0, x.note, 0]); }
+      ev.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+      let d = [0, 255, 81, 3, 7, 161, 32, 0, 255, 88, 4, 4, 2, 24, 8], last = 0;   // 120 BPM, 4/4
+      for (const [t, on, n, v] of ev) { d.push(...vlq(t - last), on ? 144 : 128, n & 127, v & 127); last = t; }
+      d.push(0, 255, 47, 0);
+      const h = [77, 84, 104, 100, 0, 0, 0, 6, 0, 0, 0, 1, 1, 224], tk = [77, 84, 114, 107, (d.length >>> 24) & 255, (d.length >>> 16) & 255, (d.length >>> 8) & 255, d.length & 255];
+      return new Blob([new Uint8Array([...h, ...tk, ...d])], { type: 'audio/midi' });
+    }
+    function stopRec() {
+      if (!rec.on) return; rec.on = false;
+      for (const [src, o] of rec.open) rec.notes.push({ note: o.note, vel: o.vel, t: o.t, d: Math.max(0.05, ctx.currentTime - rec.t0 - o.t) });
+      rec.open.clear();
+      try { outTap.disconnect(rec.node); rec.node.disconnect(); rec.mute.disconnect(); } catch (e) {}
+      rec.wav = rec.n ? wav24(rec.L, rec.R, rec.n, ctx.sampleRate) : null;
+      rec.mid = rec.notes.length ? midi(rec.notes) : null;
+      rec.L = []; rec.R = []; chip.classList.remove('rec'); draw();
+    }
+    function save(blob, ext) { if (!blob) return; const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = rec.name + '.' + ext; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); }
+    async function chooseOut() {
+      msg = '';
+      try { const d = await navigator.mediaDevices.selectAudioOutput(); await ctx.setSinkId(d.deviceId); sinkLabel = d.label || 'Chosen output'; store.set('daw.sink', d.deviceId); store.set('daw.sinkLabel', sinkLabel); }
+      catch (e) { if (!e || e.name !== 'NotAllowedError') msg = 'Could not switch the output here. Use Chrome or Edge on a computer.'; }
+      draw();
+    }
+    async function defaultOut() { try { await ctx.setSinkId(''); } catch (e) {} sinkLabel = ''; store.set('daw.sink', ''); store.set('daw.sinkLabel', ''); draw(); }
+    let tick = 0;
+    function draw() {
+      clearInterval(tick);
+      const el = (t, c, x) => { const e = document.createElement(t); if (c) e.className = c; if (x !== undefined) e.textContent = x; return e; };
+      const btn = (label, cls, fn, dis) => { const b = el('button', 'big ' + (cls || ''), label); b.type = 'button'; if (dis) b.disabled = true; b.addEventListener('click', fn); return b; };
+      const sheet = el('div', 'sheet');
+      const x = el('button', 'x', '×'); x.type = 'button'; x.setAttribute('aria-label', 'Close'); x.addEventListener('click', () => panel.classList.remove('open'));
+      const h = el('h3', '', 'DAW link'); h.prepend(x); sheet.append(h);
+      sheet.append(el('div', 'sub', 'Play into your DAW live'));
+      const st = el('div', 'stat'); st.innerHTML = 'Output: <b></b>'; st.querySelector('b').textContent = sinkLabel || 'System default'; sheet.append(st);
+      sheet.append(el('p', '', 'Pick a free loopback device (BlackHole on Mac, VB-Cable on Windows), then choose it as the input of a track in any DAW. Your DAW hears Purple SoundBank clean and live, with no plugin.'));
+      const r1 = el('div', 'row'); r1.append(btn('Choose output…', 'go', chooseOut, !canSink), btn('Use default', '', defaultOut, !canSink)); sheet.append(r1);
+      if (!canSink) sheet.append(el('p', '', 'Choosing an output needs Chrome or Edge on a computer.'));
+      if (msg) sheet.append(el('p', '', msg));
+      sheet.append(el('div', 'sub', 'Record clean audio and notes'));
+      const stat = el('div', 'stat'); sheet.append(stat);
+      const r2 = el('div', 'row');
+      if (!rec.on) r2.append(btn(rec.wav ? 'Record again' : 'Start recording', 'go', startRec)); else r2.append(btn('Stop', 'stop', stopRec));
+      sheet.append(r2);
+      if (!rec.on && (rec.wav || rec.mid)) { const r3 = el('div', 'row'); r3.append(btn('Save audio (WAV)', '', () => save(rec.wav, 'wav'), !rec.wav), btn('Save notes (MIDI)', '', () => save(rec.mid, 'mid'), !rec.mid)); sheet.append(r3); }
+      sheet.append(el('p', '', '24-bit stereo WAV at ' + ctx.sampleRate + ' Hz, straight from the output with nothing added. Drag the files into any DAW.'));
+      const upd = () => {
+        if (rec.on) { const s = rec.n / ctx.sampleRate; stat.innerHTML = '<b>● REC</b> ' + fmtT(s) + ' · peak ' + (rec.peak > 0 ? (20 * Math.log10(rec.peak)).toFixed(1) : '−∞') + ' dB'; }
+        else if (rec.wav) stat.textContent = 'Take ready · ' + fmtT(rec.n / ctx.sampleRate || (rec.wav.size / 6 / ctx.sampleRate)) + (rec.mid ? ' · ' + rec.notes.length + ' notes' : '');
+        else stat.textContent = 'Press start, play, then stop and save.';
+      };
+      upd(); if (rec.on) tick = setInterval(upd, 200);
+      panel.replaceChildren(sheet);
+    }
+    chip.addEventListener('click', () => { draw(); panel.classList.add('open'); });
+    panel.addEventListener('click', e => { if (e.target === panel) panel.classList.remove('open'); });
+    window.addEventListener('keydown', e => { if (e.key === 'Escape') panel.classList.remove('open'); });
+  })();
 
 
   /* ---------- sound reactor (spectrum + level meters) ---------- */
