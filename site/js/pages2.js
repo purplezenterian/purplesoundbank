@@ -214,7 +214,7 @@
     document.body.classList.add('playing');
     const wrap = h('div', { class: 'play-wrap' }, h('div', { class: 'play-bar' }, h('b', null, C.siteName), h('span', { class: 'muted grow' }, 'One device at a time: signing in elsewhere will end this session.'),
       h('a', { class: 'btn small', href: '#/hub' }, 'Hub'), h('button', { class: 'btn small', onclick: () => leave('#/account') }, 'Account')),
-      h('iframe', Object.assign(srcdoc !== null ? { srcdoc } : { src }, { title: 'Purple SoundBank', allow: 'midi; autoplay; fullscreen; microphone; speaker-selection; local-network-access', allowfullscreen: 'true' })));
+      h('iframe', Object.assign(srcdoc !== null ? { srcdoc } : { src }, { title: 'Purple SoundBank', allow: 'midi; autoplay; fullscreen; microphone; speaker-selection; local-network-access; display-capture', allowfullscreen: 'true' })));
     const leave = to => { cleanup(); A.go(to); };
     const cleanup = () => { wrap.remove(); document.body.classList.remove('playing'); if (blobUrl) URL.revokeObjectURL(blobUrl); window.removeEventListener('hashchange', cleanup); };
     window.addEventListener('hashchange', cleanup);

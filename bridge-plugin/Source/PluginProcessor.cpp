@@ -37,6 +37,7 @@ void PSBBridgeProcessor::wsConnected()
 void PSBBridgeProcessor::wsDisconnected()
 {
     flushRequest.store (true);
+    { juce::ScopedLock fl (frameLock); frame = {}; ++frameSeq; }
     juce::ScopedLock sl (nameLock);
     browserLabel = {};
 }
@@ -58,6 +59,12 @@ void PSBBridgeProcessor::wsText (const juce::String& text)
 
 void PSBBridgeProcessor::wsBinary (const uint8_t* d, size_t size)
 {
+    if (size > 8 && d[0] == 2)   // a picture of the page (JPEG)
+    {
+        auto img = juce::ImageFileFormat::loadFrom (d + 1, size - 1);
+        if (img.isValid()) { juce::ScopedLock sl (frameLock); frame = img; ++frameSeq; }
+        return;
+    }
     if (size < 16 || d[0] != 1) return;
     uint32_t sr, frames;
     std::memcpy (&sr, d + 4, 4);

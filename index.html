@@ -2375,12 +2375,74 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
         if (m.t === 'midi' && Array.isArray(m.d) && m.d.length >= 2) { try { unlock(); onMidi({ data: m.d }); } catch (e) {} }
         else if (m.t === 'transport') { B.transport = m; B.onChange(); }
         else if (m.t === 'hello') { B.info = m; B.onChange(); }
+        else if (m.t === 'view') { M.want = Math.max(320, Math.min(1600, m.w | 0)); }
+        else if (m.t === 'ptr') { M.input(m); }
       };
-      w.onclose = () => { if (up) { if (ws === w) { ws = null; untap(); localOut(true); } set('searching'); if (want) retry = setTimeout(() => open(0), 1500); } else open(i + 1); };
+      w.onclose = () => { if (up) { if (ws === w) { ws = null; untap(); localOut(true); B.mirrorStop(); } set('searching'); if (want) retry = setTimeout(() => open(0), 1500); } else open(i + 1); };
       w.onerror = () => {};
     }
+    /* Screen mirror: the plugin window shows this tab and sends clicks and drags back. */
+    const M = { want: 900, stream: null, vid: null, cv: null, timer: 0, busy: false, down: null, quality: 0.62 };
+    B.mirror = 'off';
+    B.mirrorStart = async () => {
+      if (M.stream) return;
+      try {
+        M.stream = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 20 }, audio: false, preferCurrentTab: true, selfBrowserSurface: 'include', surfaceSwitching: 'exclude', monitorTypeSurfaces: 'exclude' });
+      } catch (e) { B.mirror = e && e.name === 'NotAllowedError' ? 'denied' : 'error'; B.onChange(); return; }
+      M.vid = document.createElement('video'); M.vid.muted = true; M.vid.playsInline = true; M.vid.srcObject = M.stream;
+      try { await M.vid.play(); } catch (e) {}
+      M.cv = document.createElement('canvas');
+      M.stream.getVideoTracks()[0].addEventListener('ended', () => B.mirrorStop());
+      M.timer = setInterval(M.frame, 66);
+      B.mirror = 'on'; B.onChange();
+    };
+    B.mirrorStop = () => {
+      clearInterval(M.timer); M.timer = 0;
+      if (M.stream) { M.stream.getTracks().forEach(t => { try { t.stop(); } catch (e) {} }); }
+      M.stream = null; M.vid = null; M.cv = null; M.busy = false; B.mirror = 'off'; B.onChange();
+    };
+    M.frame = () => {
+      if (M.busy || !ws || ws.readyState !== 1 || ws.bufferedAmount > 600000 || !M.vid || !M.vid.videoWidth) return;
+      const vw = M.vid.videoWidth, vh = M.vid.videoHeight, w = Math.min(M.want, vw), h = Math.round(w * vh / vw);
+      if (M.cv.width !== w || M.cv.height !== h) { M.cv.width = w; M.cv.height = h; }
+      M.cv.getContext('2d').drawImage(M.vid, 0, 0, w, h);
+      M.busy = true;
+      M.cv.toBlob(async b => {
+        try { if (b && ws && ws.readyState === 1) { const u = new Uint8Array(await b.arrayBuffer()), o = new Uint8Array(u.length + 1); o[0] = 2; o.set(u, 1); ws.send(o.buffer); } } catch (e) {}
+        M.busy = false;
+      }, 'image/jpeg', M.quality);
+    };
+    // Clicks and drags from the plugin window, replayed on the page.
+    const T = (() => { try { void window.top.document; return window.top; } catch (e) { return window; } })();
+    const hit = (x, y) => {
+      let doc = T.document, el = null, ox = 0, oy = 0;
+      for (let i = 0; i < 4; i++) {
+        const e = doc.elementFromPoint(x - ox, y - oy); if (!e) break; el = e;
+        if (e.tagName === 'IFRAME' && e.contentDocument) { const r = e.getBoundingClientRect(); ox += r.left; oy += r.top; doc = e.contentDocument; } else break;
+      }
+      return { el, ox, oy, doc };
+    };
+    const _spc = Element.prototype.setPointerCapture, _rpc = Element.prototype.releasePointerCapture;
+    Element.prototype.setPointerCapture = function (id) { if (id === 4242) return; return _spc.apply(this, arguments); };
+    Element.prototype.releasePointerCapture = function (id) { if (id === 4242) return; return _rpc.apply(this, arguments); };
+    M.input = m => {
+      if (!M.stream) return;
+      try { unlock(); } catch (e) {}
+      const x = m.x * T.innerWidth, y = m.y * T.innerHeight, k = m.k;
+      const fire = (t, type, ex) => {
+        const w = t.el.ownerDocument.defaultView, cx = x - t.ox, cy = y - t.oy;
+        const init = Object.assign({ bubbles: true, cancelable: true, composed: true, view: w, clientX: cx, clientY: cy, screenX: x, screenY: y, button: 0, buttons: (k === 'up' ? 0 : 1) }, ex);
+        const P = w.PointerEvent || PointerEvent, ME = w.MouseEvent || MouseEvent;
+        if (type.startsWith('pointer')) t.el.dispatchEvent(new P(type, Object.assign({ pointerId: 4242, pointerType: 'mouse', isPrimary: true }, init)));
+        else t.el.dispatchEvent(new ME(type, init));
+      };
+      if (k === 'down') { const t = hit(x, y); if (!t.el) return; M.down = { t, x, y }; fire(t, 'pointerdown'); fire(t, 'mousedown'); }
+      else if (k === 'move') { if (!M.down) return; M.down.moved = true; fire(M.down.t, 'pointermove'); fire(M.down.t, 'mousemove'); }
+      else if (k === 'up') { if (!M.down) return; const d = M.down; M.down = null; fire(d.t, 'pointerup'); fire(d.t, 'mouseup'); if (Math.hypot(x - d.x, y - d.y) < 6) fire(d.t, 'click', { buttons: 0 }); }
+      else if (k === 'wheel') { const t = hit(x, y); if (t.el) { const w = t.el.ownerDocument.defaultView; t.el.dispatchEvent(new w.WheelEvent('wheel', { bubbles: true, cancelable: true, clientX: x - t.ox, clientY: y - t.oy, deltaY: m.dy || 0 })); } }
+    };
     B.connect = () => { want = true; store.set('bridge.on', true); clearTimeout(retry); if (!ws) { set('searching'); open(0); } };
-    B.disconnect = () => { want = false; store.set('bridge.on', false); clearTimeout(retry); if (ws) { const w = ws; ws = null; try { w.close(); } catch (e) {} } untap(); localOut(true); set('off', null); };
+    B.disconnect = () => { B.mirrorStop(); want = false; store.set('bridge.on', false); clearTimeout(retry); if (ws) { const w = ws; ws = null; try { w.close(); } catch (e) {} } untap(); localOut(true); set('off', null); };
     B.setMute = on => { B.muteLocal = on; store.set('bridge.mute', on); if (ws) localOut(!on); B.onChange(); };
     window.__psbBridge = B;
     if (want) setTimeout(B.connect, 1200);
@@ -2472,6 +2534,8 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
       sheet.append(bst);
       const br = el('div', 'row');
       br.append(btn(bridge.state === 'off' ? 'Connect to plugin' : 'Disconnect', bridge.state === 'off' ? 'go' : '', () => { bridge.state === 'off' ? bridge.connect() : bridge.disconnect(); }), btn(bridge.muteLocal ? 'Browser sound: muted while linked' : 'Browser sound: playing too', '', () => bridge.setMute(!bridge.muteLocal)));
+      if (bridge.state === 'connected') br.append(btn(bridge.mirror === 'on' ? 'Stop showing screen in plugin' : 'Show screen in plugin', bridge.mirror === 'on' ? '' : 'go', () => { bridge.mirror === 'on' ? bridge.mirrorStop() : bridge.mirrorStart(); }));
+      if (bridge.mirror === 'denied') sheet.append(el('p', '', 'Screen sharing was blocked. Press the button again and choose Allow.'));
       br.append(btn('Get PSB Bridge (free)', '', () => window.open('https://purplezenterian.github.io/purplesoundbank/site/#/bridge', '_blank', 'noopener')));
       sheet.append(br);
       sheet.append(el('p', '', 'Open the PSB Bridge plugin on a track in your DAW, then press Connect. Your DAW plays these sounds, and its MIDI plays them.'));
