@@ -2468,6 +2468,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
       sheet.append(bst);
       const br = el('div', 'row');
       br.append(btn(bridge.state === 'off' ? 'Connect to plugin' : 'Disconnect', bridge.state === 'off' ? 'go' : '', () => { bridge.state === 'off' ? bridge.connect() : bridge.disconnect(); }), btn(bridge.muteLocal ? 'Browser sound: muted while linked' : 'Browser sound: playing too', '', () => bridge.setMute(!bridge.muteLocal)));
+      br.append(btn('Get PSB Bridge (free)', '', () => window.open('https://purplezenterian.github.io/purplesoundbank/site/#/bridge', '_blank', 'noopener')));
       sheet.append(br);
       sheet.append(el('p', '', 'Open the PSB Bridge plugin on a track in your DAW, then press Connect. Your DAW plays these sounds, and its MIDI plays them.'));
       sheet.append(el('div', 'sub', 'Or: play into your DAW with a loopback device'));
@@ -2492,7 +2493,12 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
       panel.replaceChildren(sheet);
     }
     bridge.onChange = () => { chip.classList.toggle('rec', rec.on); chip.classList.toggle('lnk', bridge.state === 'connected'); if (panel.classList.contains('open') && !rec.on) draw(); };
-    chip.addEventListener('click', () => { draw(); panel.classList.add('open'); });
+    const BRIDGE_PAGE = 'https://purplezenterian.github.io/purplesoundbank/site/#/bridge';
+    chip.addEventListener('click', () => {
+      // First time: take them to the free PSB Bridge download. After that: the link panel.
+      if (bridge.state !== 'connected' && !store.get('bridge.got', false)) { store.set('bridge.got', true); window.open(BRIDGE_PAGE, '_blank', 'noopener'); return; }
+      draw(); panel.classList.add('open');
+    });
     panel.addEventListener('click', e => { if (e.target === panel) panel.classList.remove('open'); });
     window.addEventListener('keydown', e => { if (e.key === 'Escape') panel.classList.remove('open'); });
   })();
