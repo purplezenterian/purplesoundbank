@@ -1,0 +1,64 @@
+name: PSB Bridge
+on:
+  push:
+    paths: ['bridge-plugin/**', '.github/workflows/bridge.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure (Mac, Intel and Apple chips)
+        if: runner.os == 'macOS'
+        run: cmake -S bridge-plugin -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" -DCMAKE_OSX_DEPLOYMENT_TARGET=10.13
+      - name: Configure (Windows)
+        if: runner.os == 'Windows'
+        run: cmake -S bridge-plugin -B build -A x64
+      - name: Build
+        run: cmake --build build --config Release --parallel
+      - name: Package (Mac)
+        if: runner.os == 'macOS'
+        run: |
+          mkdir pkg
+          cp -R "build/PSBBridge_artefacts/Release/VST3/PSB Bridge.vst3" pkg/
+          cp -R "build/PSBBridge_artefacts/Release/AU/PSB Bridge.component" pkg/
+          codesign --force --deep -s - "pkg/PSB Bridge.vst3"
+          codesign --force --deep -s - "pkg/PSB Bridge.component"
+          cp bridge-plugin/install/Install-PSB-Bridge.command pkg/
+          chmod +x pkg/Install-PSB-Bridge.command
+          cp bridge-plugin/install/README-mac.txt pkg/README.txt
+          cd pkg && zip -r -y ../PSB-Bridge-mac.zip .
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory pkg | Out-Null
+          Copy-Item -Recurse "build/PSBBridge_artefacts/Release/VST3/PSB Bridge.vst3" pkg/
+          Copy-Item bridge-plugin/install/Install-PSB-Bridge.bat pkg/
+          Copy-Item bridge-plugin/install/README-win.txt pkg/README.txt
+          Compress-Archive -Path pkg/* -DestinationPath PSB-Bridge-win.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bridge-${{ runner.os }}
+          path: PSB-Bridge-*.zip
+  release:
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dl
+          merge-multiple: true
+      - name: Publish the latest build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete bridge-latest --cleanup-tag --yes --repo "$GITHUB_REPOSITORY" || true
+          gh release create bridge-latest dl/PSB-Bridge-*.zip --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "PSB Bridge (latest)" --notes "The PSB Bridge plugin for your DAW. Download it from the Purple SoundBank hub."
