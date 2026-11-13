@@ -81,6 +81,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
 #slotMenu .sheet { width: min(340px, calc(100vw - 32px)); max-height: calc(100vh - 110px); overflow: auto; background: #0b0813; border: 1px solid var(--glow); border-radius: 14px; padding: 12px; box-shadow: 0 0 30px rgba(var(--glow-rgb), .5); }
 .chips { display: flex; gap: 8px; align-items: center; }
 #daw-chip.rec .dot { background: #ff4d6d; box-shadow: 0 0 8px #ff4d6d; }
+#daw-chip.lnk .dot { background: #4cf0a6; box-shadow: 0 0 8px #4cf0a6; }
 #daw-chip.rec .txt::after { content: " · REC"; }
 #dawMenu { position: fixed; inset: 0; z-index: 61; display: none; align-items: flex-start; justify-content: center; padding-top: 60px; background: rgba(2,1,6,.78); }
 #dawMenu.open { display: flex; }
@@ -2333,6 +2334,55 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
   syncLoads();
   initMidi();
 
+  /* ---------- PSB Bridge: link to the plugin inside a DAW (audio out, notes in, tempo) ---------- */
+  const bridge = (() => {
+    const PORTS = [48210, 48211, 48212, 48213, 48214, 48215, 48216, 48217, 48218, 48219];
+    const B = { state: 'off', port: 0, info: null, transport: null, muteLocal: store.get('bridge.mute', true), frames: 0, onChange: () => {} };
+    let ws = null, sp = null, zero = null, want = store.get('bridge.on', false), retry = 0, seq = 0;
+    const set = (st, extra) => { B.state = st; if (extra !== undefined) B.info = extra; B.onChange(); };
+    function localOut(on) { try { outTrim.disconnect(ctx.destination); } catch (e) {} if (on) outTrim.connect(ctx.destination); }
+    function tap() {
+      if (sp) return;
+      sp = ctx.createScriptProcessor(1024, 2, 2); zero = ctx.createGain(); zero.gain.value = 0;
+      sp.onaudioprocess = e => {
+        if (!ws || ws.readyState !== 1 || ws.bufferedAmount > 400000) return;
+        const l = e.inputBuffer.getChannelData(0), r = e.inputBuffer.getChannelData(e.inputBuffer.numberOfChannels > 1 ? 1 : 0), n = l.length;
+        const buf = new ArrayBuffer(16 + n * 8), v = new DataView(buf), f = new Float32Array(buf, 16, n * 2);
+        v.setUint8(0, 1); v.setUint8(1, 2); v.setUint32(4, ctx.sampleRate, true); v.setUint32(8, n, true); v.setUint32(12, seq++ >>> 0, true);
+        for (let i = 0; i < n; i++) { f[i * 2] = l[i]; f[i * 2 + 1] = r[i]; }
+        ws.send(buf); B.frames += n;
+      };
+      outTap.connect(sp); sp.connect(zero); zero.connect(ctx.destination);
+    }
+    function untap() { if (!sp) return; try { outTap.disconnect(sp); sp.disconnect(); zero.disconnect(); } catch (e) {} sp.onaudioprocess = null; sp = null; zero = null; }
+    function open(i) {
+      if (!want) return;
+      if (i >= PORTS.length) { set('searching'); retry = setTimeout(() => open(0), 3000); return; }
+      let w; try { w = new WebSocket('ws://127.0.0.1:' + PORTS[i]); } catch (e) { open(i + 1); return; }
+      w.binaryType = 'arraybuffer'; let up = false;
+      w.onopen = () => {
+        up = true; ws = w; B.port = PORTS[i]; B.frames = 0;
+        w.send(JSON.stringify({ t: 'hello', app: 'Purple SoundBank', v: 1, sampleRate: ctx.sampleRate }));
+        tap(); if (B.muteLocal) localOut(false); set('connected');
+      };
+      w.onmessage = ev => {
+        if (typeof ev.data !== 'string') return;
+        let m; try { m = JSON.parse(ev.data); } catch (e) { return; }
+        if (m.t === 'midi' && Array.isArray(m.d) && m.d.length >= 2) { try { unlock(); onMidi({ data: m.d }); } catch (e) {} }
+        else if (m.t === 'transport') { B.transport = m; B.onChange(); }
+        else if (m.t === 'hello') { B.info = m; B.onChange(); }
+      };
+      w.onclose = () => { if (up) { if (ws === w) { ws = null; untap(); localOut(true); } set('searching'); if (want) retry = setTimeout(() => open(0), 1500); } else open(i + 1); };
+      w.onerror = () => {};
+    }
+    B.connect = () => { want = true; store.set('bridge.on', true); clearTimeout(retry); if (!ws) { set('searching'); open(0); } };
+    B.disconnect = () => { want = false; store.set('bridge.on', false); clearTimeout(retry); if (ws) { const w = ws; ws = null; try { w.close(); } catch (e) {} } untap(); localOut(true); set('off', null); };
+    B.setMute = on => { B.muteLocal = on; store.set('bridge.mute', on); if (ws) localOut(!on); B.onChange(); };
+    window.__psbBridge = B;
+    if (want) setTimeout(B.connect, 1200);
+    return B;
+  })();
+
   /* ---------- DAW link: choose where the sound goes, and record it clean ---------- */
   (() => {
     const chip = $('daw-chip'); if (!chip) return;
@@ -2411,7 +2461,16 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
       const sheet = el('div', 'sheet');
       const x = el('button', 'x', '×'); x.type = 'button'; x.setAttribute('aria-label', 'Close'); x.addEventListener('click', () => panel.classList.remove('open'));
       const h = el('h3', '', 'DAW link'); h.prepend(x); sheet.append(h);
-      sheet.append(el('div', 'sub', 'Play into your DAW live'));
+      // PSB Bridge: the plugin inside the DAW
+      sheet.append(el('div', 'sub', 'PSB Bridge (plugin in your DAW)'));
+      const bst = el('div', 'stat'); bst.innerHTML = 'Bridge: <b></b>';
+      bst.querySelector('b').textContent = bridge.state === 'connected' ? 'connected' + (bridge.info && bridge.info.host ? ' to ' + bridge.info.host : '') + ' · port ' + bridge.port : bridge.state === 'searching' ? 'looking for the plugin…' : 'off';
+      sheet.append(bst);
+      const br = el('div', 'row');
+      br.append(btn(bridge.state === 'off' ? 'Connect to plugin' : 'Disconnect', bridge.state === 'off' ? 'go' : '', () => { bridge.state === 'off' ? bridge.connect() : bridge.disconnect(); }), btn(bridge.muteLocal ? 'Browser sound: muted while linked' : 'Browser sound: playing too', '', () => bridge.setMute(!bridge.muteLocal)));
+      sheet.append(br);
+      sheet.append(el('p', '', 'Open the PSB Bridge plugin on a track in your DAW, then press Connect. Your DAW plays these sounds, and its MIDI plays them.'));
+      sheet.append(el('div', 'sub', 'Or: play into your DAW with a loopback device'));
       const st = el('div', 'stat'); st.innerHTML = 'Output: <b></b>'; st.querySelector('b').textContent = sinkLabel || 'System default'; sheet.append(st);
       sheet.append(el('p', '', 'Pick a free loopback device (BlackHole on Mac, VB-Cable on Windows), then choose it as the input of a track in any DAW. Your DAW hears Purple SoundBank clean and live, with no plugin.'));
       const r1 = el('div', 'row'); r1.append(btn('Choose output…', 'go', chooseOut, !canSink), btn('Use default', '', defaultOut, !canSink)); sheet.append(r1);
@@ -2432,6 +2491,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
       upd(); if (rec.on) tick = setInterval(upd, 200);
       panel.replaceChildren(sheet);
     }
+    bridge.onChange = () => { chip.classList.toggle('rec', rec.on); chip.classList.toggle('lnk', bridge.state === 'connected'); if (panel.classList.contains('open') && !rec.on) draw(); };
     chip.addEventListener('click', () => { draw(); panel.classList.add('open'); });
     panel.addEventListener('click', e => { if (e.target === panel) panel.classList.remove('open'); });
     window.addEventListener('keydown', e => { if (e.key === 'Escape') panel.classList.remove('open'); });
