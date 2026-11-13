@@ -242,8 +242,8 @@
       } }, 'Pay £5 and unlock everything');
       const no = h('button', { class: 'btn', onclick: () => { stop = true; box.remove(); } }, 'Not now');
       const box = h('div', { id: 'upgrade-box', style: 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.78);display:flex;align-items:center;justify-content:center;padding:16px' },
-        h('div', { class: 'card narrow center' }, h('h2', null, 'Unlock the new sounds'),
-          h('p', null, 'Start your full plan now: £5 is charged today and your free month ends. You get every sound, including the new basses, and every update from now on.'),
+        h('div', { class: 'card narrow center' }, h('h2', null, 'Unlock the new sounds and the DAW link'),
+          h('p', null, 'Start your full plan now: £5 is charged today and your free month ends. You get every sound, including the new basses, the link to your DAW, and every update from now on.'),
           h('div', { class: 'row', style: 'justify-content:center;gap:10px' }, go, no), note));
       document.body.append(box);
     };

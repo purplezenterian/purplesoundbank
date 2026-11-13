@@ -2441,7 +2441,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
       else if (k === 'up') { if (!M.down) return; const d = M.down; M.down = null; fire(d.t, 'pointerup'); fire(d.t, 'mouseup'); if (Math.hypot(x - d.x, y - d.y) < 6) fire(d.t, 'click', { buttons: 0 }); }
       else if (k === 'wheel') { const t = hit(x, y); if (t.el) { const w = t.el.ownerDocument.defaultView; t.el.dispatchEvent(new w.WheelEvent('wheel', { bubbles: true, cancelable: true, clientX: x - t.ox, clientY: y - t.oy, deltaY: m.dy || 0 })); } }
     };
-    B.connect = () => { want = true; store.set('bridge.on', true); clearTimeout(retry); if (!ws) { set('searching'); open(0); } };
+    B.connect = () => { if (Array.isArray(window.PSB_LOCKED) && window.PSB_LOCKED.length) return; want = true; store.set('bridge.on', true); clearTimeout(retry); if (!ws) { set('searching'); open(0); } };
     B.disconnect = () => { B.mirrorStop(); want = false; store.set('bridge.on', false); clearTimeout(retry); if (ws) { const w = ws; ws = null; try { w.close(); } catch (e) {} } untap(); localOut(true); set('off', null); };
     B.setMute = on => { B.muteLocal = on; store.set('bridge.mute', on); if (ws) localOut(!on); B.onChange(); };
     window.__psbBridge = B;
@@ -2543,7 +2543,10 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
     }
     bridge.onChange = () => { chip.classList.toggle('rec', rec.on); chip.classList.toggle('lnk', bridge.state === 'connected'); if (panel.classList.contains('open') && !rec.on) draw(); };
     const BRIDGE_PAGE = 'https://purplezenterian.github.io/purplesoundbank/site/#/bridge';
+    // Free-month members have padlocked sounds; the DAW link is part of the full plan too.
+    const dawLocked = () => Array.isArray(window.PSB_LOCKED) && window.PSB_LOCKED.length > 0;
     chip.addEventListener('click', () => {
+      if (dawLocked()) { try { window.parent.postMessage({ psb: 'upgrade', sound: 'dawlink' }, '*'); } catch (e) {} return; }
       // First time: take them to the free PSB Bridge download. After that: the link panel.
       if (bridge.state !== 'connected' && !store.get('bridge.got', false)) { store.set('bridge.got', true); window.open(BRIDGE_PAGE, '_blank', 'noopener'); return; }
       draw(); panel.classList.add('open');
