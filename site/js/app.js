@@ -94,7 +94,7 @@
       links = [link('#/hub', 'Hub', 'hub'),
         S.profile && (S.profile.is_admin || A.isAmb(S.profile)) ? link('#/ambassadors', '\u2605 Ambassadors', 'ambassadors') : null,
         S.profile && !(S.profile.is_admin || A.isAmb(S.profile)) && S.hasGc ? link('#/ambassadors/groups', 'Group chats', 'ambassadors') : null,
-        S.profile && S.profile.is_admin ? link('#/admin', 'Admin', 'admin') : null, link('#/account', 'Account', 'account')];
+        S.profile && S.profile.is_admin ? link('#/people', 'People', 'people') : null, S.profile && S.profile.is_admin ? link('#/admin', 'Admin', 'admin') : null, link('#/account', 'Account', 'account')];
     } else if (S.session) {
       links = [link('#/pricing', 'Membership', 'pricing'), link('#/account', 'Account', 'account')];
       right = [h('button', { class: 'btn small', onclick: signOut }, 'Sign out')];

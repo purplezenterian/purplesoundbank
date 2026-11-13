@@ -243,6 +243,36 @@
     { const auto = A.autoSong; A.autoSong = false; let tries = 0; const fr = wrap.querySelector('iframe'); const iv = setInterval(() => { try { const d = fr.contentDocument; const pb = d && [...d.querySelectorAll('button')].find(b => b.textContent.trim() === 'Perform'); if (pb) pb.click(); if (firstRun && !auto) { if (pb) clearInterval(iv); return; } const row = auto ? (d && d.querySelector('.song.on')) : (d && [...d.querySelectorAll('.song')].find(x => { const n = x.querySelector('.nm'); return n && /^\s*basic worship\s*$/i.test(n.textContent); })); if (row) { if (auto || !row.classList.contains('on')) row.click(); clearInterval(iv); } } catch (e) {} if (++tries > 40) clearInterval(iv); }, 500); }
   };
 
+  /* ---------- Admin: people and who is online ---------- */
+  R.people = async () => {
+    if (!(S.profile && S.profile.is_admin)) return A.go('#/hub');
+    A.setTitle('People');
+    const sum = h('div', { class: 'row', style: 'gap:10px;flex-wrap:wrap;margin-bottom:14px' }), onl = h('div'), all = h('div');
+    const q = h('input', { type: 'text', placeholder: 'Search name or email', style: 'width:100%;margin-bottom:10px' });
+    let rows = [], plan = 'all';
+    const chips = h('div', { class: 'tabs', style: 'margin:0 0 10px' });
+    const PLANS = [['all', 'Everyone'], ['trialing', 'Free month (demo)'], ['active', 'Paying'], ['past_due', 'Payment failed'], ['none', 'No plan']];
+    const planOf = r => (r.status === 'trialing' || r.status === 'active' || r.status === 'past_due') ? r.status : 'none';
+    const stat = (n, label, hot) => h('div', { class: 'card', style: 'padding:10px 16px;min-width:120px' + (hot ? ';border-color:#22d36b' : '') }, h('div', { style: 'font-size:26px;font-weight:700' + (hot ? ';color:#22d36b' : '') }, String(n)), h('div', { class: 'small muted' }, label));
+    const pill = r => { const s = planOf(r); const t = { trialing: 'Free month', active: 'Paying', past_due: 'Payment failed', none: 'No plan' }[s]; const col = { trialing: '#ffd23f', active: '#22d36b', past_due: '#ff5d6c', none: '#888' }[s]; return h('span', { class: 'pill', style: 'color:' + col + ';border-color:' + col }, t + (s === 'trialing' && r.trial_end ? ' \u00b7 ends ' + new Date(r.trial_end).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : '')); };
+    const row = r => h('div', { class: 'list-row', style: 'gap:10px' },
+      h('span', { title: r.online ? 'Online now' : 'Offline', style: 'width:10px;height:10px;border-radius:50%;flex:none;background:' + (r.online ? '#22d36b;box-shadow:0 0 8px #22d36b' : '#444') }),
+      h('div', { class: 'grow' }, h('a', { href: '#/u/' + r.username }, r.display_name || r.username), r.ambassador ? ' ★' : '', h('div', { class: 'small muted' }, '@' + r.username + (r.email ? ' · ' + r.email : ''))),
+      pill(r), h('div', { class: 'small muted', style: 'text-align:right;min-width:110px' }, r.online ? 'online now' : (r.last_seen ? 'seen ' + A.ago(r.last_seen) : 'never opened'), h('div', null, 'joined ' + A.ago(r.created_at))));
+    const paint = () => {
+      const t = q.value.trim().toLowerCase(); const hit = r => (plan === 'all' || planOf(r) === plan) && (!t || (r.username + ' ' + (r.display_name || '') + ' ' + (r.email || '')).toLowerCase().includes(t));
+      const on = rows.filter(r => r.online && hit(r)), rest = rows.filter(r => !r.online && hit(r));
+      sum.replaceChildren(stat(rows.filter(r => r.online).length, 'online now', true), stat(rows.length, 'signed up'), stat(rows.filter(r => planOf(r) === 'trialing').length, 'free month (demo)'), stat(rows.filter(r => planOf(r) === 'active').length, 'paying'), stat(rows.filter(r => planOf(r) === 'past_due').length, 'payment failed'));
+      chips.replaceChildren(...PLANS.map(p => h('a', { class: 'tab' + (plan === p[0] ? ' on' : ''), href: '#/people', onclick: e => { e.preventDefault(); plan = p[0]; paint(); } }, p[1] + ' (' + (p[0] === 'all' ? rows.length : rows.filter(r => planOf(r) === p[0]).length) + ')')));
+      onl.replaceChildren(h('h3', { style: 'margin:6px 0' }, 'Online now (' + on.length + ')'), ...(on.length ? on.map(row) : [h('div', { class: 'empty' }, 'Nobody online right now.')]));
+      all.replaceChildren(h('h3', { style: 'margin:16px 0 6px' }, 'Everyone else (' + rest.length + ')'), ...(rest.length ? rest.map(row) : [h('div', { class: 'empty' }, 'No one else.')]));
+    };
+    const load = async () => { try { rows = await api.adminPeople(); paint(); } catch (e) { onl.replaceChildren(h('div', { class: 'empty' }, 'Could not load: ' + ((e && e.message) || 'error'))); } };
+    q.addEventListener('input', paint);
+    A.render(h('div', { class: 'mid' }, h('h1', { style: 'font-size:30px' }, 'People'), h('p', { class: 'small muted' }, 'Updates every 5 seconds. Online means the hub was open in the last 90 seconds.'), sum, chips, q, onl, all));
+    await load(); A.timers.push(setInterval(load, 5000));
+  };
+
   /* ---------- Ambassadors: private room + group chats ---------- */
   function chatBox(load, send, del) {
     const list = h('div', { style: 'display:flex;flex-direction:column;gap:10px;max-height:55vh;overflow-y:auto;padding:4px 2px' });

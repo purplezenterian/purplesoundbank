@@ -150,6 +150,7 @@
     async sendMessage(userId, body) { const u = await me(); body = String(body || '').trim(); if (!body) return; const { error } = await sb.from('messages').insert({ sender_id: u, recipient_id: userId, body: body.slice(0, 2000) }); if (error) throw err(/row-level/i.test(error.message) ? 'You can only message friends you have not blocked.' : error.message); return true; },
     async markRead(userId) { const u = await me(); await sb.from('messages').update({ read_at: new Date().toISOString() }).eq('recipient_id', u).eq('sender_id', userId).is('read_at', null); },
     // ---- Ambassadors: names (for the black star) and the private chat room
+    async adminPeople() { return q(sb.rpc('admin_people')); },
     async ambassadorNames() { const { data, error } = await sb.from('ambassador_names').select('username'); return error ? [] : (data || []).map(x => x.username); },
     async ambMessages() {
       const u = await me();
