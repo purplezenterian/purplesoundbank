@@ -2460,7 +2460,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
       const btn = (label, cls, fn, dis) => { const b = el('button', 'big ' + (cls || ''), label); b.type = 'button'; if (dis) b.disabled = true; b.addEventListener('click', fn); return b; };
       const sheet = el('div', 'sheet');
       const x = el('button', 'x', '×'); x.type = 'button'; x.setAttribute('aria-label', 'Close'); x.addEventListener('click', () => panel.classList.remove('open'));
-      const h = el('h3', '', 'DAW link'); h.prepend(x); sheet.append(h);
+      const h = el('h3', '', 'Link to DAW'); h.prepend(x); sheet.append(h);
       // PSB Bridge: the plugin inside the DAW
       sheet.append(el('div', 'sub', 'PSB Bridge (plugin in your DAW)'));
       const bst = el('div', 'stat'); bst.innerHTML = 'Bridge: <b></b>';
@@ -2471,25 +2471,6 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
       br.append(btn('Get PSB Bridge (free)', '', () => window.open('https://purplezenterian.github.io/purplesoundbank/site/#/bridge', '_blank', 'noopener')));
       sheet.append(br);
       sheet.append(el('p', '', 'Open the PSB Bridge plugin on a track in your DAW, then press Connect. Your DAW plays these sounds, and its MIDI plays them.'));
-      sheet.append(el('div', 'sub', 'Or: play into your DAW with a loopback device'));
-      const st = el('div', 'stat'); st.innerHTML = 'Output: <b></b>'; st.querySelector('b').textContent = sinkLabel || 'System default'; sheet.append(st);
-      sheet.append(el('p', '', 'Pick a free loopback device (BlackHole on Mac, VB-Cable on Windows), then choose it as the input of a track in any DAW. Your DAW hears Purple SoundBank clean and live, with no plugin.'));
-      const r1 = el('div', 'row'); r1.append(btn('Choose output…', 'go', chooseOut, !canSink), btn('Use default', '', defaultOut, !canSink)); sheet.append(r1);
-      if (!canSink) sheet.append(el('p', '', 'Choosing an output needs Chrome or Edge on a computer.'));
-      if (msg) sheet.append(el('p', '', msg));
-      sheet.append(el('div', 'sub', 'Record clean audio and notes'));
-      const stat = el('div', 'stat'); sheet.append(stat);
-      const r2 = el('div', 'row');
-      if (!rec.on) r2.append(btn(rec.wav ? 'Record again' : 'Start recording', 'go', startRec)); else r2.append(btn('Stop', 'stop', stopRec));
-      sheet.append(r2);
-      if (!rec.on && (rec.wav || rec.mid)) { const r3 = el('div', 'row'); r3.append(btn('Save audio (WAV)', '', () => save(rec.wav, 'wav'), !rec.wav), btn('Save notes (MIDI)', '', () => save(rec.mid, 'mid'), !rec.mid)); sheet.append(r3); }
-      sheet.append(el('p', '', '24-bit stereo WAV at ' + ctx.sampleRate + ' Hz, straight from the output with nothing added. Drag the files into any DAW.'));
-      const upd = () => {
-        if (rec.on) { const s = rec.n / ctx.sampleRate; stat.innerHTML = '<b>● REC</b> ' + fmtT(s) + ' · peak ' + (rec.peak > 0 ? (20 * Math.log10(rec.peak)).toFixed(1) : '−∞') + ' dB'; }
-        else if (rec.wav) stat.textContent = 'Take ready · ' + fmtT(rec.n / ctx.sampleRate || (rec.wav.size / 6 / ctx.sampleRate)) + (rec.mid ? ' · ' + rec.notes.length + ' notes' : '');
-        else stat.textContent = 'Press start, play, then stop and save.';
-      };
-      upd(); if (rec.on) tick = setInterval(upd, 200);
       panel.replaceChildren(sheet);
     }
     bridge.onChange = () => { chip.classList.toggle('rec', rec.on); chip.classList.toggle('lnk', bridge.state === 'connected'); if (panel.classList.contains('open') && !rec.on) draw(); };
