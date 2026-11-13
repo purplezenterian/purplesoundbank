@@ -20,14 +20,25 @@
         try { const txt = JSON.stringify(o); await api.setSetlist(txt); await api.setNamedSetlist('jedzenti', txt); const n = (() => { try { return JSON.parse(o['psb.songs'] || '[]').length; } catch (x) { return 0; } })(); btn.textContent = 'Published \u2713'; try { localStorage.setItem('site.pubdone', '1'); } catch (x) {} A.toast('Published to all members (' + n + ' songs)'); } catch (er) { A.fail(er); } } }, (() => { try { return localStorage.getItem('site.pubdone') ? 'Published \u2713' : 'Publish to members'; } catch (x) { return 'Publish to members'; } })()) : null,
       h('div', { class: 'meta', style: 'margin-top:8px' }, h('span', null, '♥ ' + p.like_count), h('span', null, '💬 ' + p.comment_count)));
   }
+  async function videoGallery(box) {
+    try {
+      const r = await fetch('videos/videos.json'); if (!r.ok) return; const v = await r.json();
+      const groups = [...new Set(v.map(x => x.group))];
+      box.append(h('h2', { style: 'font-size:22px;margin:4px 0 4px' }, 'Purple SoundBank videos'), h('p', { class: 'muted small' }, '50 short videos on how to get the most from the instrument.'));
+      groups.forEach(g => box.append(h('h3', { style: 'margin:18px 0 8px' }, g), h('div', { class: 'grid g3' }, v.filter(x => x.group === g).map(x => h('div', { class: 'card' },
+        h('video', { controls: true, preload: 'none', playsinline: true, poster: 'videos/' + x.file + '.jpg', src: 'videos/' + x.file + '.mp4', style: 'width:100%;border-radius:10px;background:#000;aspect-ratio:9/16;object-fit:contain' }),
+        h('div', { style: 'margin-top:8px;font-weight:600' }, x.n + '. ' + x.title))))));
+      box.append(h('hr', { style: 'margin:22px 0;border:0;border-top:1px solid var(--line)' }), h('h2', { style: 'font-size:22px;margin:0 0 8px' }, 'Member posts'));
+    } catch (e) { /* gallery is optional */ }
+  }
   R.hub = async segs => {
     if (segs[0] === 'new') return newPost();
     if (segs[0] === 'post') return postPage(segs[1]);
     A.setTitle('Hub');
     const cat = A.query.get('c') || 'all';
-    const list = h('div'); const moreWrap = h('div', { class: 'center' });
+    const list = h('div'); const moreWrap = h('div', { class: 'center' }); const vids = h('div'); if (cat === 'showtell') videoGallery(vids);
     A.render(h('div', { class: 'row', style: 'justify-content:space-between;margin-bottom:12px' }, h('h1', { style: 'font-size:30px;margin:0' }, 'The hub'), h('span', null, h('a', { class: 'btn', href: '#/play', style: 'margin-right:8px' }, 'Open the instrument'), h('a', { class: 'btn', href: '#/mysongs', style: 'margin-right:8px' }, 'My set lists'), h('a', { class: 'btn primary', href: '#/hub/new' }, 'New post'))),
-      h('div', { class: 'tabs', role: 'tablist' }, CATS.map(c => h('a', { class: 'tab' + (c[0] === cat ? ' on' : ''), href: '#/hub' + (c[0] === 'all' ? '' : '?c=' + c[0]), role: 'tab' }, c[1]))), list, moreWrap);
+      h('div', { class: 'tabs', role: 'tablist' }, CATS.map(c => h('a', { class: 'tab' + (c[0] === cat ? ' on' : ''), href: '#/hub' + (c[0] === 'all' ? '' : '?c=' + c[0]), role: 'tab' }, c[1]))), vids, list, moreWrap);
     let before = null;
     const load = async () => {
       const r = await api.listPosts({ category: cat === 'all' ? null : cat, before });
