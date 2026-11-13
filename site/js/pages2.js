@@ -341,6 +341,35 @@
   };
 
   /* ---------- one-tap export of this browser's instrument settings ---------- */
+  /* ---------- PSB Bridge: the plugin that brings the hub's sounds into any DAW ---------- */
+  R.bridge = async () => {
+    A.setTitle('PSB Bridge');
+    const REL = 'https://github.com/purplezenterian/purplesoundbank/releases/download/bridge-latest/';
+    const dl = (label, file, sub) => h('a', { class: 'btn primary', href: REL + file, rel: 'noopener', style: 'display:block;text-align:center;padding:14px 18px' }, h('b', null, label), h('div', { class: 'small', style: 'opacity:.8;font-weight:400' }, sub));
+    const out = h('p', { class: 'small', style: 'min-height:1.4em;margin:10px 0 0' }, '');
+    const check = async () => {
+      out.className = 'small muted'; out.textContent = 'Looking for the plugin…';
+      for (let p = 48210; p <= 48219; p++) {
+        const ok = await new Promise(res => { let w; try { w = new WebSocket('ws://127.0.0.1:' + p); } catch (e) { return res(false); } const t = setTimeout(() => { try { w.close(); } catch (e) {} res(false); }, 700); w.onopen = () => { clearTimeout(t); try { w.close(); } catch (e) {} res(true); }; w.onerror = () => { clearTimeout(t); res(false); }; });
+        if (ok) { out.className = 'small'; out.style.color = '#4cf0a6'; out.textContent = 'Found it. The plugin is running in your DAW and ready to connect.'; return; }
+      }
+      out.className = 'small'; out.style.color = '#f0b64c'; out.textContent = 'Not found. Open your DAW, add PSB Bridge on a track, then press this again. If Chrome asks to allow access to devices on your network, press Allow.';
+    };
+    const li = (t, d) => h('li', { style: 'margin:0 0 10px' }, h('b', null, t), d ? h('div', { class: 'muted small' }, d) : null);
+    A.render(h('div', { class: 'mid' },
+      h('div', { class: 'center' }, h('h1', { style: 'font-size:clamp(28px,5vw,40px)' }, 'PSB Bridge'), h('p', { class: 'muted' }, 'Play Purple SoundBank inside any DAW. The plugin has no sounds of its own: it brings the hub into your track.')),
+      h('div', { class: 'card' }, h('h2', null, '1. Download'),
+        h('div', { class: 'row', style: 'gap:12px;flex-wrap:wrap' }, dl('Download for Mac', 'PSB-Bridge-mac.zip', 'VST3 and Audio Unit · Intel and Apple chips'), dl('Download for Windows', 'PSB-Bridge-win.zip', 'VST3 · 64-bit')),
+        h('p', { class: 'muted small', style: 'margin-top:12px' }, 'Works in Logic, Ableton Live, FL Studio, Cubase, Studio One, Reaper, Bitwig and any other DAW that takes VST3 or Audio Units. Pro Tools is not supported yet.')),
+      h('div', { class: 'card' }, h('h2', null, '2. Install'),
+        h('ol', { style: 'padding-left:20px;margin:0' }, li('Unzip the download'), li('Mac: double-click Install-PSB-Bridge.command', 'If your Mac blocks it, right-click it, choose Open, then Open again.'), li('Windows: double-click Install-PSB-Bridge.bat'), li('Restart your DAW and rescan plugins'))),
+      h('div', { class: 'card' }, h('h2', null, '3. Use it'),
+        h('ol', { style: 'padding-left:20px;margin:0' }, li('Add PSB Bridge as an instrument on a track in your DAW'), li('Open the hub in Chrome or Edge and start the instrument', 'Keep the hub open: your sounds play from here.'), li('Press the DAW button at the top right, then Connect to plugin'), li('Play your DAW\'s MIDI. The sounds come out of the track, ready to record and mix'))),
+      h('div', { class: 'card' }, h('h2', null, 'Check the link'), h('p', { class: 'muted small' }, 'With the plugin open in your DAW, press this to see if the hub can find it.'), h('button', { class: 'btn', onclick: check }, 'Check for the plugin'), out),
+      h('div', { class: 'card' }, h('h2', null, 'Good to know'),
+        h('ul', { style: 'padding-left:20px;margin:0' }, li('Use Chrome or Edge on a computer', 'Safari and phones cannot connect to a plugin.'), li('One device at a time', 'It uses your normal member sign-in, so the sound plays from the hub tab you have open.'), li('When you connect, the sound plays in your DAW instead of the browser', 'You can switch the browser sound back on in the DAW panel.')))));
+  };
+
   R.export = async () => {
     A.setTitle('Export');
     const o = {}; for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k.startsWith('psb.') && k !== 'psb.did') o[k] = localStorage.getItem(k); }
