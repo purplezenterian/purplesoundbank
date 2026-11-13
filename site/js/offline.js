@@ -12,6 +12,8 @@
     pass,
     async save(html, p) { await put('instrument', html); try { localStorage.setItem(PASS, JSON.stringify({ uid: p.id, name: p.username, until: Date.now() + DAYS * 864e5 })); } catch (e) {} },
     async load() { try { return await get('instrument'); } catch (e) { return null; } },
+    async saveSound(id, samples) { try { await put('sound:' + id, samples); } catch (e) {} },
+    async sound(id) { try { return await get('sound:' + id); } catch (e) { return null; } },
     home() {
       const p = pass(); document.body.classList.remove('playing');
       const nav = document.getElementById('nav'); if (nav) nav.replaceChildren(h('div', { class: 'row', style: 'padding:14px 20px' }, h('b', null, C.siteName)));

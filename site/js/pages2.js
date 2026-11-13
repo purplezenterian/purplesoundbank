@@ -200,6 +200,17 @@
     try { const ALL = ["purplegrand","purpleep2","polypad","multistrings","dminus22","zdkstrings","synbrass2","80spopbrass"]; const cur = localStorage.getItem('psb.off'); let arr = null; try { arr = JSON.parse(cur); } catch (x) {}
       firstRun = !A.autoSong && (cur === null || (Array.isArray(arr) && ALL.every(id => arr.includes(id))));
       if (firstRun) localStorage.setItem('psb.off', JSON.stringify(ALL)); } catch (e) {}
+    // The instrument loads each sound's audio on demand: it asks this page, which checks the plan and returns just that sound.
+    window.__psbSound = async id => {
+      const cache = A.offline && A.offline.eligible(S.profile);
+      if (A.offlinePlay) { const d = await A.offline.sound(id); if (d) return d; throw new Error('That sound is not saved on this device'); }
+      try {
+        const res = await fetch(await api.soundUrl(id)); if (!res.ok) throw new Error('sound ' + res.status);
+        const samples = (await res.json()).samples;
+        if (cache) A.offline.saveSound(id, samples);
+        return samples;
+      } catch (e) { const d = cache ? await A.offline.sound(id) : null; if (d) return d; throw e; }
+    };
     document.body.classList.add('playing');
     const wrap = h('div', { class: 'play-wrap' }, h('div', { class: 'play-bar' }, h('b', null, C.siteName), h('span', { class: 'muted grow' }, 'One device at a time: signing in elsewhere will end this session.'),
       h('a', { class: 'btn small', href: '#/hub' }, 'Hub'), h('button', { class: 'btn small', onclick: () => leave('#/account') }, 'Account')),

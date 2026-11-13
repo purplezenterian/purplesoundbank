@@ -74,6 +74,7 @@
     async upgradeNow(card) { return fnOrThrow('upgrade-now', card ? { card } : {}); },
     async openPortal() { const d = await fnOrThrow('billing-portal'); return { url: d.url }; },
     async instrumentUrl() { const d = await fnOrThrow('get-instrument', { deviceId: await PSB_DEVICE.deviceId() }); return d.url; },
+    async soundUrl(id) { const d = await fnOrThrow('get-instrument', { deviceId: await PSB_DEVICE.deviceId(), sound: id }); return d.url; },
 
     async me() { const u = await me(); if (!u) return null; return q(sb.from('profiles').select(prof + ',trial_used').eq('id', u).single()); },
     async getProfile(username) { return q(sb.from('profiles').select(prof).eq('username', String(username).toLowerCase()).maybeSingle()); },
