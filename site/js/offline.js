@@ -8,7 +8,7 @@
   const get = async k => { const d = await idb(); return new Promise((res, rej) => { const q = d.transaction('kv').objectStore('kv').get(k); q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error); }); };
   const pass = () => { try { const p = JSON.parse(localStorage.getItem(PASS) || 'null'); return p && p.until > Date.now() ? p : null; } catch (e) { return null; } };
   const O = A.offline = {
-    eligible: p => !!(p && (p.is_admin || (C.ambassadors || []).indexOf(String(p.username || '').toLowerCase()) >= 0)),
+    eligible: p => !!(p && (p.is_admin || A.isAmb(p))),
     pass,
     async save(html, p) { await put('instrument', html); try { localStorage.setItem(PASS, JSON.stringify({ uid: p.id, name: p.username, until: Date.now() + DAYS * 864e5 })); } catch (e) {} },
     async load() { try { return await get('instrument'); } catch (e) { return null; } },

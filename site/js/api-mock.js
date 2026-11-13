@@ -134,6 +134,11 @@
       S.subs[m.id] = { status: trial ? 'trialing' : 'active', trial_end: trial ? iso(now() + 30 * DAY) : null, current_period_end: iso(now() + 30 * DAY), cancel_at_period_end: false };
       m.trial_used = true; save(); return true;
     },
+    // ---- Ambassadors (demo): same shape as the live API
+    async ambassadorNames() { return []; },
+    async ambMessages() { const u = me(); return (S.amb || (S.amb = [])).map(x => Object.assign({}, x, { mine: x.author.id === u.id })); },
+    async ambSend(body) { const u = me(); body = String(body || '').trim(); if (!body) return; (S.amb || (S.amb = [])).push({ id: Date.now(), body, created_at: iso(now()), author: { id: u.id, username: u.username, display_name: u.display_name, avatar_color: u.avatar_color, is_admin: u.is_admin } }); save(); return true; },
+    async ambDelete(id) { S.amb = (S.amb || []).filter(x => x.id !== id); save(); },
     async openPortal() { return delay({ mock: true }); },
     async mockPortalAction(a) { const m = me(); const s = S.subs[m.id]; if (!s) return; if (a === 'cancel') s.cancel_at_period_end = true; if (a === 'resume') s.cancel_at_period_end = false; if (a === 'end') s.status = 'canceled'; if (a === 'pastdue') s.status = 'past_due'; if (a === 'restore') s.status = s.trial_end && now() < Date.parse(s.trial_end) ? 'trialing' : 'active'; save(); },
     async upgradeNow() { return delay({ ok: true }); },

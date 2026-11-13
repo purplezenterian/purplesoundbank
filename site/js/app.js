@@ -31,8 +31,9 @@
   A.ago = iso => { const s = Math.max(1, (Date.now() - Date.parse(iso)) / 1000); if (s < 60) return 'just now'; if (s < 3600) return Math.floor(s / 60) + 'm ago'; if (s < 86400) return Math.floor(s / 3600) + 'h ago'; if (s < 86400 * 30) return Math.floor(s / 86400) + 'd ago'; return new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }); };
   A.date = iso => new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' });
   A.avatar = (u, cls) => h('span', { class: 'av ' + (cls || ''), style: 'background:' + ((u && u.avatar_color) || '#7b2fff'), 'aria-hidden': 'true' }, ((u && (u.display_name || u.username)) || '?').trim().charAt(0));
+  A.isAmb = u => !!(u && ((C.ambassadors || []).concat(A.ambNames || []).indexOf(String(u.username || '').toLowerCase()) >= 0));
   A.badge = u => {
-    if (u && !u.is_admin && ((C.ambassadors || []).indexOf(String(u.username || '').toLowerCase()) >= 0)) { const s = h('span', { title: 'Ambassador', style: 'display:inline-flex;vertical-align:middle;margin-left:5px;filter:drop-shadow(0 0 3px rgba(255,255,255,.55))' }); s.innerHTML = '<svg viewBox="0 0 24 24" width="17" height="17" aria-label="Ambassador" role="img"><path fill="#000" stroke="#fff" stroke-width="1.3" stroke-linejoin="round" d="M12 1.8l3 6.6 7.2.8-5.4 4.9 1.5 7.1L12 17.5l-6.3 3.7 1.5-7.1L1.8 9.2 9 8.4z"/></svg>'; return s; }
+    if (u && !u.is_admin && A.isAmb(u)) { const s = h('span', { title: 'Ambassador', style: 'display:inline-flex;vertical-align:middle;margin-left:5px;filter:drop-shadow(0 0 3px rgba(255,255,255,.55))' }); s.innerHTML = '<svg viewBox="0 0 24 24" width="17" height="17" aria-label="Ambassador" role="img"><path fill="#000" stroke="#fff" stroke-width="1.3" stroke-linejoin="round" d="M12 1.8l3 6.6 7.2.8-5.4 4.9 1.5 7.1L12 17.5l-6.3 3.7 1.5-7.1L1.8 9.2 9 8.4z"/></svg>'; return s; }
     if (!u || !u.is_admin) return null;
     const b = h('span', { title: 'Admin', style: 'display:inline-flex;vertical-align:middle;margin-left:5px;filter:drop-shadow(0 0 4px rgba(139,61,255,.8))' }); b.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" aria-label="Admin" role="img"><path fill="#8b3dff" d="M12 1.5l2.4 1.7 2.9-.2 1.2 2.6 2.6 1.2-.2 2.9L22.5 12l-1.7 2.4.2 2.9-2.6 1.2-1.2 2.6-2.9-.2L12 22.5l-2.4-1.7-2.9.2-1.2-2.6L2.9 15.2l.2-2.9L1.5 12l1.7-2.4-.2-2.9 2.6-1.2 1.2-2.6 2.9.2z"/><path fill="#fff" d="M7 15.5l-.9-5.2 3.1 2.4L12 8.2l2.8 4.5 3.1-2.4-.9 5.2z"/><rect x="7" y="16.3" width="10" height="1.5" rx=".7" fill="#fff"/></svg>'; return b; };
   A.who = u => h('a', { class: 'who', href: '#/u/' + u.username }, A.avatar(u, 'sm'), u.display_name || u.username, A.badge(u));
@@ -64,6 +65,7 @@
     else if (r.status === 'too_many_devices') S.blocker = { type: 'toomany' };
     S.sub = await api.getSubscription();
     S.profile = await api.me();
+    try { A.ambNames = (await api.ambassadorNames() || []).map(x => String(x).toLowerCase()); } catch (e) { A.ambNames = A.ambNames || []; }
     if (!S.blocker) await refreshCounts();
   }
   async function refreshCounts() { if (!A.isMember()) return; try { S.counts = await api.counts(); renderNav(); } catch (e) { /* ignore */ } }
@@ -89,6 +91,7 @@
     let links = [], right = [];
     if (S.session && !S.blocker && A.isMember()) {
       links = [link('#/hub', 'Hub', 'hub'),
+        S.profile && (S.profile.is_admin || A.isAmb(S.profile)) ? link('#/ambassadors', '\u2605 Ambassadors', 'ambassadors') : null,
         S.profile && S.profile.is_admin ? link('#/admin', 'Admin', 'admin') : null, link('#/account', 'Account', 'account')];
     } else if (S.session) {
       links = [link('#/pricing', 'Membership', 'pricing'), link('#/account', 'Account', 'account')];
@@ -157,7 +160,7 @@
   // One-time "you're an Ambassador" notice, shown the first time a listed user opens the site.
   let ambShown = false;
   function ambassadorWelcome() {
-    const u = S.profile; if (ambShown || !u || !u.username || !((C.ambassadors || []).indexOf(String(u.username).toLowerCase()) >= 0)) return;
+    const u = S.profile; if (ambShown || !u || !u.username || !(A.isAmb(u))) return;
     const key = 'site.ambassador.' + u.id; try { if (localStorage.getItem(key)) return; } catch (e) {}
     ambShown = true; try { localStorage.setItem(key, '1'); } catch (e) {}
     A.modal(h('div', { class: 'center' }, (() => { const d = h('div', { style: 'line-height:0' }); d.innerHTML = '<svg viewBox="0 0 24 24" width="54" height="54" aria-hidden="true"><path fill="#000" stroke="#fff" stroke-width="1.1" stroke-linejoin="round" d="M12 1.8l3 6.6 7.2.8-5.4 4.9 1.5 7.1L12 17.5l-6.3 3.7 1.5-7.1L1.8 9.2 9 8.4z"/></svg>'; return d; })(), h('h2', null, 'You are now a Purple SoundBank Ambassador'),

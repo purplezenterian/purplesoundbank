@@ -149,6 +149,15 @@
     },
     async sendMessage(userId, body) { const u = await me(); body = String(body || '').trim(); if (!body) return; const { error } = await sb.from('messages').insert({ sender_id: u, recipient_id: userId, body: body.slice(0, 2000) }); if (error) throw err(/row-level/i.test(error.message) ? 'You can only message friends you have not blocked.' : error.message); return true; },
     async markRead(userId) { const u = await me(); await sb.from('messages').update({ read_at: new Date().toISOString() }).eq('recipient_id', u).eq('sender_id', userId).is('read_at', null); },
+    // ---- Ambassadors: names (for the black star) and the private chat room
+    async ambassadorNames() { const { data, error } = await sb.from('ambassador_names').select('username'); return error ? [] : (data || []).map(x => x.username); },
+    async ambMessages() {
+      const u = await me();
+      const rows = await q(sb.from('amb_messages').select('id,body,created_at,author:profiles!amb_messages_author_id_fkey(id,username,display_name,avatar_color,is_admin)').order('id', { ascending: false }).limit(200));
+      return rows.reverse().map(m => Object.assign(m, { mine: m.author && m.author.id === u }));
+    },
+    async ambSend(body) { const u = await me(); body = String(body || '').trim(); if (!body) return; const { error } = await sb.from('amb_messages').insert({ author_id: u, body: body.slice(0, 2000) }); if (error) throw err(/row-level/i.test(error.message) ? 'Only Ambassadors can post here.' : error.message); return true; },
+    async ambDelete(id) { await q(sb.from('amb_messages').delete().eq('id', id)); },
     async createShare(name, song) { return q(sb.rpc('create_share', { n: name, s: song })); },
     async getShare(code) { return q(sb.rpc('get_share', { c: code })); },
     async setNamedSetlist(n, txt) { await q(sb.rpc('set_named_setlist', { n, v: txt })); },
