@@ -50,7 +50,8 @@ private:
 
     // Only touched on the audio thread
     double readPos = 0.0, ratioTrim = 1.0, hostRate = 48000.0;
-    bool primed = false;
+    bool primed = false, wasOffline = false, offlinePrimed = false;
+    static constexpr double offlineLatencySeconds = 0.045;
 
     std::atomic<float> meter { 0.0f };
     juce::CriticalSection nameLock;

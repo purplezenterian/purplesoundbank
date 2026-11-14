@@ -15,6 +15,9 @@ void PSBBridgeProcessor::prepareToPlay (double sampleRate, int)
 {
     hostRate = sampleRate;
     flushRequest.store (true);
+    // While the host bounces (offline), this plugin runs at real time and the browser's sound arrives a little late.
+    // Tell the host about that delay so it lines the bounce up.
+    setLatencySamples (isNonRealtime() ? (int) (offlineLatencySeconds * sampleRate) : 0);
 }
 
 bool PSBBridgeProcessor::isBusesLayoutSupported (const BusesLayout& l) const
@@ -116,11 +119,42 @@ void PSBBridgeProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::M
     midi.clear();
 
     // The browser's audio comes out of the track. Resampling and a gentle drift correction keep it in time.
+    const bool offline = isNonRealtime();
+    if (offline != wasOffline) { wasOffline = offline; flushRequest.store (true); }
     const double ratioBase = srcRate.load() / hostRate;
     const double target = 0.040 * srcRate.load();      // keep about 40 ms in hand
     const uint64_t w = writePos.load (std::memory_order_acquire);
 
     if (flushRequest.exchange (false)) { primed = false; readPos = (double) w; }
+
+    if (offline)
+    {
+        // Bounce in Place / Export: the host asks for audio faster than real time, but the sound only exists in the browser.
+        // So wait here until the browser has delivered this block's audio. The bounce then takes as long as the music.
+        if (! server.isConnected()) { buffer.clear(); return; }
+        if (! offlinePrimed) { offlinePrimed = true; readPos = (double) w; }
+        const double need = (double) n * ratioBase + 2.0;
+        const auto deadline = juce::Time::getMillisecondCounter() + 4000;
+        while ((double) writePos.load (std::memory_order_acquire) < readPos + need && juce::Time::getMillisecondCounter() < deadline)
+            juce::Thread::sleep (1);
+        const uint64_t w2 = writePos.load (std::memory_order_acquire);
+        if ((double) w2 < readPos + need) { buffer.clear(); return; }
+        float pk = 0.0f;
+        for (int i = 0; i < n; ++i)
+        {
+            const uint64_t i0 = (uint64_t) readPos;
+            const float fr = (float) (readPos - (double) i0);
+            const size_t a0 = (size_t) (i0 & (uint64_t) (ringSize - 1)), b0 = (size_t) ((i0 + 1) & (uint64_t) (ringSize - 1));
+            const float l = ringL[a0] + (ringL[b0] - ringL[a0]) * fr;
+            const float r = ringR[a0] + (ringR[b0] - ringR[a0]) * fr;
+            outL[i] = l; outR[i] = r;
+            pk = juce::jmax (pk, std::abs (l), std::abs (r));
+            readPos += ratioBase;
+        }
+        meter.store (juce::jmax (pk, meter.load() * 0.9f));
+        return;
+    }
+    offlinePrimed = false;
 
     double fill = (double) w - readPos;
     if (! primed)
