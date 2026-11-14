@@ -37,9 +37,20 @@
     A.setTitle('Hub');
     const cat = A.query.get('c') || 'all';
     const list = h('div'); const moreWrap = h('div', { class: 'center' }); const vids = h('div'); if (cat === 'showtell') videoGallery(vids);
+    const patchBox = h('div');   // "N new patches" strip
     const annBox = h('div');   // newest pinned post shows here once, as an announcement
-    A.render(annBox, h('div', { class: 'row', style: 'justify-content:space-between;margin-bottom:12px' }, h('h1', { style: 'font-size:30px;margin:0' }, 'The hub'), h('span', null, h('a', { class: 'btn', href: '#/play', style: 'margin-right:8px' }, 'Open the instrument'), h('a', { class: 'btn', href: '#/mysongs', style: 'margin-right:8px' }, 'My set lists'), h('a', { class: 'btn primary', href: '#/hub/new' }, 'New post'))),
+    A.render(patchBox, annBox, h('div', { class: 'row', style: 'justify-content:space-between;margin-bottom:12px' }, h('h1', { style: 'font-size:30px;margin:0' }, 'The hub'), h('span', null, h('a', { class: 'btn', href: '#/play', style: 'margin-right:8px' }, 'Open the instrument'), h('a', { class: 'btn', href: '#/mysongs', style: 'margin-right:8px' }, 'My set lists'), h('a', { class: 'btn primary', href: '#/hub/new' }, 'New post'))),
       h('div', { class: 'tabs', role: 'tablist' }, CATS.map(c => h('a', { class: 'tab' + (c[0] === cat ? ' on' : ''), href: '#/hub' + (c[0] === 'all' ? '' : '?c=' + c[0]), role: 'tab' }, c[1]))), vids, list, moreWrap);
+    fetch('../sounds.json?t=' + Date.now(), { cache: 'no-store' }).then(r => r.json()).then(list => {   // "N new patches": sounds this device has not seen yet
+      let seen = null; try { seen = JSON.parse(localStorage.getItem('site.sounds.seen') || 'null'); } catch (e) {}
+      const ids = list.map(x => x.id), mark = () => { try { localStorage.setItem('site.sounds.seen', JSON.stringify(ids)); } catch (e) {} };
+      if (!Array.isArray(seen)) { mark(); return; }   // first visit on this device: nothing is "new" yet
+      const fresh = list.filter(x => !seen.includes(x.id)); if (!fresh.length) return;
+      patchBox.replaceChildren(h('div', { class: 'card', style: 'margin-bottom:14px;border-color:var(--glow);background:rgba(var(--glow-rgb),.18)' },
+        h('div', { class: 'row', style: 'justify-content:space-between;align-items:center;gap:12px' },
+          h('div', null, h('div', { style: 'font-weight:700;font-size:18px' }, '\u2728 ' + fresh.length + ' new patch' + (fresh.length === 1 ? '' : 'es')), h('div', { class: 'muted small' }, fresh.map(x => x.name).join(' \u2022 '))),
+          h('span', null, h('a', { class: 'btn primary small', href: '#/play', style: 'margin-right:8px', onclick: mark }, 'Try them'), h('button', { class: 'btn small', onclick: () => { mark(); patchBox.replaceChildren(); } }, 'Dismiss')))));
+    }).catch(() => {});
     api.listPosts({ category: null }).then(r => {   // announcement banner: the newest pinned post, until they close it
       const top = (r.pinned || [])[0]; if (!top) return;
       let seen = null; try { seen = localStorage.getItem('site.ann'); } catch (e) {}
