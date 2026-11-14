@@ -33,6 +33,39 @@ juce::String PSBBridgeProcessor::browserName() const
     return browserLabel;
 }
 
+void PSBBridgeProcessor::sendToBrowser (const juce::String& json)
+{
+    server.sendText (json);
+    if (pageSinkSet.load())
+    {
+        juce::ScopedLock sl (sinkLock);
+        if (pageSink) pageSink (json);
+    }
+}
+
+void PSBBridgeProcessor::setPageSink (std::function<void (const juce::String&)> f)
+{
+    juce::ScopedLock sl (sinkLock);
+    pageSink = std::move (f);
+    pageSinkSet.store ((bool) pageSink);
+    flushRequest.store (true);
+}
+
+// Messages from the page when it lives inside the plugin window (same messages the socket carries).
+void PSBBridgeProcessor::pageText (const juce::String& text)
+{
+    lastPageMs.store (juce::Time::getMillisecondCounter());
+    wsText (text);
+    if (text.contains ("\"hello\""))
+        sendToBrowser ("{\"t\":\"hello\",\"v\":2,\"plugin\":\"PSB Bridge\",\"embedded\":true}");
+}
+
+void PSBBridgeProcessor::pageBinary (const uint8_t* d, size_t size)
+{
+    lastPageMs.store (juce::Time::getMillisecondCounter());
+    wsBinary (d, size);
+}
+
 void PSBBridgeProcessor::wsConnected()
 {
     flushRequest.store (true);
@@ -115,7 +148,7 @@ void PSBBridgeProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::M
         if (expected > 800.0 && (nowMs - anchorMs) < expected * 0.5) fastLatched = true;
     }
     const bool render = flagged || fastLatched;
-    const bool connected = server.isConnected();
+    const bool connected = browserConnected();
     if (! render) renderSynced = false;
     if (render != wasRender) { wasRender = render; flushRequest.store (true); }
 
@@ -123,7 +156,7 @@ void PSBBridgeProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::M
     if (render && connected && ! renderSynced)
     {
         baseReady.store (false);
-        server.sendText ("{\"t\":\"sync\",\"s\":" + juce::String ((juce::int64) blockStart) + ",\"rate\":" + juce::String (hostRate, 3)
+        sendToBrowser ("{\"t\":\"sync\",\"s\":" + juce::String ((juce::int64) blockStart) + ",\"rate\":" + juce::String (hostRate, 3)
                          + ",\"look\":" + juce::String (lookAheadSeconds, 3) + "}");
         const auto until = juce::Time::getMillisecondCounter() + 1500;
         while (! baseReady.load() && juce::Time::getMillisecondCounter() < until) juce::Thread::sleep (1);
@@ -145,7 +178,7 @@ void PSBBridgeProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::M
                 s << "]";
                 if (stamp) s << ",\"s\":" << juce::String ((juce::int64) (blockStart + (uint64_t) meta.samplePosition));
                 s << "}";
-                server.sendText (s);
+                sendToBrowser (s);
             }
         }
         const auto now = juce::Time::getMillisecondCounter();
@@ -159,7 +192,7 @@ void PSBBridgeProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::M
                     if (auto bpm = pos->getBpm()) s << ",\"bpm\":" << *bpm;
                     if (auto ppq = pos->getPpqPosition()) s << ",\"ppq\":" << *ppq;
                     s << "}";
-                    server.sendText (s);
+                    sendToBrowser (s);
                 }
         }
     }

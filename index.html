@@ -2341,10 +2341,14 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
   initMidi();
 
   /* ---------- PSB Bridge: link to the plugin inside a DAW (audio out, notes in, tempo) ---------- */
+  // Inside the PSB plugin window the page talks to the plugin directly (no browser link, no Connect button).
+  const EMB = (() => { try { return !!(window.__psbPlugin || (window.parent && window.parent.__psbPlugin)); } catch (e) { return false; } })();
+  const juceBackend = () => { try { return (window.__JUCE__ && window.__JUCE__.backend) || (window.parent && window.parent.__JUCE__ && window.parent.__JUCE__.backend) || null; } catch (e) { return null; } };
+  const b64 = buf => { const u = new Uint8Array(buf); let s = ''; for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000)); return btoa(s); };
   const bridge = (() => {
     const PORTS = [48210, 48211, 48212, 48213, 48214, 48215, 48216, 48217, 48218, 48219];
     const B = { v2: false, tapShift: 0, chainDelay: 0.016, base: null, state: 'off', port: 0, info: null, transport: null, muteLocal: store.get('bridge.mute', true), frames: 0, onChange: () => {} };
-    let ws = null, sp = null, zero = null, want = store.get('bridge.on', false), retry = 0, seq = 0;
+    let ws = null, sp = null, zero = null, want = store.get('bridge.on', false), retry = 0, seq = 0, embW = null, embListening = false;
     const set = (st, extra) => { B.state = st; if (extra !== undefined) B.info = extra; B.onChange(); };
     function localOut(on) { try { outTrim.disconnect(ctx.destination); } catch (e) {} if (on) outTrim.connect(ctx.destination); }
     function tap() {
@@ -2400,17 +2404,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
       outTap.connect(sp); sp.connect(zero); zero.connect(ctx.destination);
     }
     function untap() { if (!sp) return; try { outTap.disconnect(sp); sp.disconnect(); zero.disconnect(); } catch (e) {} sp.onaudioprocess = null; sp = null; zero = null; }
-    function open(i) {
-      if (!want) return;
-      if (i >= PORTS.length) { set('searching'); retry = setTimeout(() => open(0), 3000); return; }
-      let w; try { w = new WebSocket('ws://127.0.0.1:' + PORTS[i]); } catch (e) { open(i + 1); return; }
-      w.binaryType = 'arraybuffer'; let up = false;
-      w.onopen = () => {
-        up = true; ws = w; B.port = PORTS[i]; B.frames = 0; B.base = null; B.v2 = false;
-        w.send(JSON.stringify({ t: 'hello', app: 'Purple SoundBank', v: 1, sampleRate: ctx.sampleRate }));
-        tap(); if (B.muteLocal) localOut(false); set('connected');
-      };
-      w.onmessage = ev => {
+    function onMsg(ev) {
         if (typeof ev.data !== 'string') return;
         let m; try { m = JSON.parse(ev.data); } catch (e) { return; }
         if (m.t === 'midi' && Array.isArray(m.d) && m.d.length >= 2) {
@@ -2429,21 +2423,56 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
         }
         else if (m.t === 'transport') { B.transport = m; B.onChange(); }
         else if (m.t === 'hello') { B.info = m; B.v2 = (m.v | 0) >= 2; B.onChange(); }
+      }
+    function openEmbedded() {
+      if (!want) return;
+      const J = juceBackend();
+      if (!J) { set('searching'); retry = setTimeout(openEmbedded, 700); return; }
+      const w = { readyState: 1, bufferedAmount: 0,
+        send(d) { try { if (typeof d === 'string') J.emitEvent('psb', { k: 't', d }); else J.emitEvent('psb', { k: 'b', d: b64(d) }); } catch (e) {} },
+        close() {} };
+      embW = w;
+      if (!embListening) { embListening = true; J.addEventListener('psb', p => { if (embW && embW.onmessage) embW.onmessage({ data: typeof p === 'string' ? p : JSON.stringify(p) }); }); }
+      w.onmessage = onMsg;
+      ws = w; B.port = 0; B.frames = 0; B.base = null; B.v2 = false;
+      w.send(JSON.stringify({ t: 'hello', app: 'Purple SoundBank', v: 1, sampleRate: ctx.sampleRate }));
+      tap(); localOut(false); set('connected');
+    }
+    function open(i) {
+      if (!want) return;
+      if (i >= PORTS.length) { set('searching'); retry = setTimeout(() => open(0), 3000); return; }
+      let w; try { w = new WebSocket('ws://127.0.0.1:' + PORTS[i]); } catch (e) { open(i + 1); return; }
+      w.binaryType = 'arraybuffer'; let up = false;
+      w.onopen = () => {
+        up = true; ws = w; B.port = PORTS[i]; B.frames = 0; B.base = null; B.v2 = false;
+        w.send(JSON.stringify({ t: 'hello', app: 'Purple SoundBank', v: 1, sampleRate: ctx.sampleRate }));
+        tap(); if (B.muteLocal) localOut(false); set('connected');
       };
+      w.onmessage = onMsg;
       w.onclose = () => { if (up) { if (ws === w) { ws = null; untap(); localOut(true); } set('searching'); if (want) retry = setTimeout(() => open(0), 1500); } else open(i + 1); };
       w.onerror = () => {};
     }
-    B.connect = () => { if (Array.isArray(window.PSB_LOCKED) && window.PSB_LOCKED.length) return; want = true; store.set('bridge.on', true); clearTimeout(retry); if (!ws) { set('searching'); open(0); } };
+    B.connect = () => { if (Array.isArray(window.PSB_LOCKED) && window.PSB_LOCKED.length) return; want = true; store.set('bridge.on', true); clearTimeout(retry); if (!ws) { set('searching'); EMB ? openEmbedded() : open(0); } };
     B.disconnect = () => { want = false; store.set('bridge.on', false); clearTimeout(retry); if (ws) { const w = ws; ws = null; try { w.close(); } catch (e) {} } untap(); localOut(true); set('off', null); };
     B.setMute = on => { B.muteLocal = on; store.set('bridge.mute', on); if (ws) localOut(!on); B.onChange(); };
     window.__psbBridge = B;
+    if (EMB) setTimeout(() => B.connect(), 300);
     if (want) setTimeout(B.connect, 1200);
     return B;
   })();
 
   /* ---------- DAW link: choose where the sound goes, and record it clean ---------- */
   (() => {
+    if (EMB && Array.isArray(window.PSB_LOCKED) && window.PSB_LOCKED.length) {
+      // Free-month members: the plugin is part of the full plan.
+      const o = document.createElement('div');
+      o.style.cssText = 'position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:rgba(7,4,15,.92);color:#fff;font:16px system-ui;text-align:center;padding:24px';
+      o.innerHTML = '<div style="max-width:420px"><div style="font-size:22px;font-weight:700;margin-bottom:10px">The plugin is part of the full plan</div><div style="opacity:.8;margin-bottom:18px">Upgrade to play Purple SoundBank in your DAW, with every sound and every update.</div><button id="psb-up" style="background:#7c3aed;color:#fff;border:0;border-radius:10px;padding:12px 22px;font-size:16px;cursor:pointer">Unlock the full plan</button></div>';
+      document.body.appendChild(o);
+      o.querySelector('#psb-up').onclick = () => { try { window.parent.postMessage({ psb: 'upgrade', sound: 'dawlink' }, '*'); } catch (e) {} };
+    }
     const chip = $('daw-chip'); if (!chip) return;
+    if (EMB) { chip.style.display = 'none'; return; }
     const panel = document.createElement('div'); panel.id = 'dawMenu'; document.body.appendChild(panel);
     const rec = { on: false, node: null, mute: null, L: [], R: [], n: 0, t0: 0, peak: 0, notes: [], open: new Map(), wav: null, mid: null, name: '' };
     // Notes played while recording are kept, so the same take can also be saved as a MIDI file.

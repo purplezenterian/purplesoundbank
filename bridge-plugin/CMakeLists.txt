@@ -11,6 +11,15 @@ else()
   FetchContent_MakeAvailable(juce)
 endif()
 
+# The instrument itself lives inside the plugin window (Mac first). Elsewhere the plugin still links to the browser.
+if(APPLE)
+  set(PSB_EMBED_ON TRUE)
+  set(PSB_WEB 1)
+else()
+  set(PSB_EMBED_ON FALSE)
+  set(PSB_WEB 0)
+endif()
+
 set(FORMATS VST3)
 if(APPLE)
   list(APPEND FORMATS AU)
@@ -24,9 +33,10 @@ juce_add_plugin(PSBBridge
   NEEDS_MIDI_INPUT TRUE
   NEEDS_MIDI_OUTPUT FALSE
   IS_MIDI_EFFECT FALSE
-  EDITOR_WANTS_KEYBOARD_FOCUS FALSE
+  EDITOR_WANTS_KEYBOARD_FOCUS TRUE
   COPY_PLUGIN_AFTER_BUILD FALSE
   FORMATS ${FORMATS}
+  NEEDS_WEB_BROWSER ${PSB_EMBED_ON}
   PRODUCT_NAME "PSB Bridge"
   BUNDLE_ID com.purplesoundbank.bridge
   AU_MAIN_TYPE kAudioUnitType_MusicDevice)
@@ -37,7 +47,8 @@ target_sources(PSBBridge PRIVATE
   Source/WsServer.cpp)
 
 target_compile_definitions(PSBBridge PUBLIC
-  JUCE_WEB_BROWSER=0
+  JUCE_WEB_BROWSER=${PSB_WEB}
+  PSB_EMBED=${PSB_WEB}
   JUCE_USE_CURL=0
   JUCE_VST3_CAN_REPLACE_VST2=0
   JUCE_DISPLAY_SPLASH_SCREEN=0
@@ -47,5 +58,6 @@ target_link_libraries(PSBBridge PRIVATE
   juce::juce_audio_utils
   juce::juce_audio_processors
   juce::juce_gui_basics
+  juce::juce_gui_extra
   juce::juce_events
   PUBLIC juce::juce_recommended_config_flags juce::juce_recommended_warning_flags)

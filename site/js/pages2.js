@@ -357,17 +357,16 @@
     };
     const li = (t, d) => h('li', { style: 'margin:0 0 10px' }, h('b', null, t), d ? h('div', { class: 'muted small' }, d) : null);
     A.render(h('div', { class: 'mid' },
-      h('div', { class: 'center' }, h('h1', { style: 'font-size:clamp(28px,5vw,40px)' }, 'PSB Bridge'), h('p', { class: 'muted' }, 'Play Purple SoundBank inside any DAW. The plugin has no sounds of its own: it brings the hub into your track.')),
+      h('div', { class: 'center' }, h('h1', { style: 'font-size:clamp(28px,5vw,40px)' }, 'PSB Bridge'), h('p', { class: 'muted' }, 'Purple SoundBank inside your DAW. Sign in and play it exactly like the website.')),
       h('div', { class: 'card' }, h('h2', null, '1. Download'),
         h('div', { class: 'row', style: 'gap:12px;flex-wrap:wrap' }, dl('Download for Mac', 'PSB-Bridge-mac.zip', 'VST3 and Audio Unit · Intel and Apple chips'), dl('Download for Windows', 'PSB-Bridge-win.zip', 'VST3 · 64-bit')),
         h('p', { class: 'muted small', style: 'margin-top:12px' }, 'Works in Logic, Ableton Live, FL Studio, Cubase, Studio One, Reaper, Bitwig and any other DAW that takes VST3 or Audio Units. Pro Tools is not supported yet.')),
       h('div', { class: 'card' }, h('h2', null, '2. Install'),
         h('ol', { style: 'padding-left:20px;margin:0' }, li('Unzip the download'), li('Mac: double-click Install-PSB-Bridge.command', 'If your Mac blocks it, right-click it, choose Open, then Open again.'), li('Windows: double-click Install-PSB-Bridge.bat'), li('Restart your DAW and rescan plugins'))),
       h('div', { class: 'card' }, h('h2', null, '3. Use it'),
-        h('ol', { style: 'padding-left:20px;margin:0' }, li('Add PSB Bridge as an instrument on a track in your DAW'), li('Open the hub in Chrome or Edge and start the instrument', 'Keep the hub open: your sounds play from here.'), li('Press the Link to DAW button at the top right, then Connect to plugin'), li('Play your DAW\'s MIDI. The sounds come out of the track, ready to record and mix'))),
-      h('div', { class: 'card' }, h('h2', null, 'Check the link'), h('p', { class: 'muted small' }, 'With the plugin open in your DAW, press this to see if the hub can find it.'), h('button', { class: 'btn', onclick: check }, 'Check for the plugin'), out),
+        h('ol', { style: 'padding-left:20px;margin:0' }, li('Add PSB Bridge as an instrument on a track in your DAW'), li('Open the plugin window and sign in with your Purple SoundBank account', 'It is the same instrument as the website, with the same sounds and updates.'), li('Play your MIDI. The sound comes out of the track, ready to mix', 'Keep the plugin window open while you play or bounce.'))),
       h('div', { class: 'card' }, h('h2', null, 'Good to know'),
-        h('ul', { style: 'padding-left:20px;margin:0' }, li('Use Chrome or Edge on a computer', 'Safari and phones cannot connect to a plugin.'), li('One device at a time', 'It uses your normal member sign-in, so the sound plays from the hub tab you have open.'), li('When you connect, the sound plays in your DAW instead of the browser', 'You can switch the browser sound back on in the DAW panel.')))));
+        h('ul', { style: 'padding-left:20px;margin:0' }, li('Needs the full plan', 'The plugin is part of the paid plan. Free-month members can play on the website.'), li('One device at a time', 'It uses your normal sign-in, so signing in elsewhere ends the plugin session.'), li('Mac first', 'The plugin has the instrument inside on Mac now. Windows still plays through Chrome for the moment.')))));
   };
 
   R.export = async () => {

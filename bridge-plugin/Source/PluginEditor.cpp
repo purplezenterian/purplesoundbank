@@ -2,10 +2,64 @@
 
 PSBBridgeEditor::PSBBridgeEditor (PSBBridgeProcessor& p) : AudioProcessorEditor (&p), proc (p)
 {
+#if PSB_EMBED
+    // The real Purple SoundBank lives in this window. Members sign in here and play exactly as on the website.
+    setResizable (true, true);
+    setResizeLimits (640, 420, 3000, 2000);
+    setSize (1180, 760);
+    setWantsKeyboardFocus (true);
+    web = std::make_unique<juce::WebBrowserComponent> (juce::WebBrowserComponent::Options{}
+            .withNativeIntegrationEnabled()
+            .withKeepPageLoadedWhenBrowserIsHidden()
+            .withEventListener ("psb", [this] (const juce::var& v) { onPage (v); }));
+    addAndMakeVisible (*web);
+    web->setBounds (getLocalBounds());
+    proc.setPageSink ([safe = juce::Component::SafePointer<PSBBridgeEditor> (this)] (const juce::String& s)
+                      { juce::MessageManager::callAsync ([safe, s] { if (safe != nullptr) safe->emit (s); }); });
+    web->goToURL ("https://purplezenterian.github.io/purplesoundbank/site/?plugin=1#/play");
+#else
     setSize (520, 300);
+#endif
     startTimerHz (20);
 }
-PSBBridgeEditor::~PSBBridgeEditor() { stopTimer(); }
+PSBBridgeEditor::~PSBBridgeEditor()
+{
+    stopTimer();
+#if PSB_EMBED
+    proc.setPageSink ({});
+    web.reset();
+#endif
+}
+
+void PSBBridgeEditor::resized()
+{
+#if PSB_EMBED
+    if (web) web->setBounds (getLocalBounds());
+#endif
+}
+
+#if PSB_EMBED
+void PSBBridgeEditor::emit (const juce::String& json)
+{
+    if (web) web->emitEventIfBrowserIsVisible ("psb", juce::var (json));
+}
+
+void PSBBridgeEditor::onPage (const juce::var& v)
+{
+    if (auto* o = v.getDynamicObject())
+    {
+        const auto k = o->getProperty ("k").toString();
+        const auto d = o->getProperty ("d").toString();
+        if (k == "t") proc.pageText (d);
+        else if (k == "b")
+        {
+            juce::MemoryOutputStream m;
+            if (juce::Base64::convertFromBase64 (m, d))
+                proc.pageBinary (static_cast<const uint8_t*> (m.getData()), m.getDataSize());
+        }
+    }
+}
+#endif
 
 void PSBBridgeEditor::paint (juce::Graphics& g)
 {

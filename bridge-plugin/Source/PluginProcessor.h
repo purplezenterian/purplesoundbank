@@ -31,7 +31,13 @@ public:
     void setStateInformation (const void*, int) override {}
 
     // Shown in the plugin window
-    bool browserConnected() const { return server.isConnected(); }
+    // The page can be linked two ways: through the local socket (Chrome) or by living inside the plugin window.
+    bool pageLinked() const { return pageSinkSet.load() && (juce::Time::getMillisecondCounter() - lastPageMs.load()) < 2500; }
+    bool browserConnected() const { return server.isConnected() || pageLinked(); }
+    void sendToBrowser (const juce::String& json);
+    void setPageSink (std::function<void (const juce::String&)> f);
+    void pageText (const juce::String& text);
+    void pageBinary (const uint8_t* d, size_t size);
     int  port() const { return server.getPort(); }
     juce::String browserName() const;
     float level() const { return meter.load(); }
@@ -58,6 +64,10 @@ private:
     bool renderSynced = false, fastLatched = false, wasRender = false;
     double anchorMs = 0.0, lastBlockMs = 0.0; uint64_t anchorSample = 0;
     std::atomic<bool> baseReady { false };
+    juce::CriticalSection sinkLock;
+    std::function<void (const juce::String&)> pageSink;
+    std::atomic<bool> pageSinkSet { false };
+    std::atomic<juce::uint32> lastPageMs { 0 };
     std::atomic<double> baseSec { 0.0 };
     std::atomic<double> chunkOffset { 0.0 };      // browser frame index minus ring position, from the newest chunk
     int64_t renderShift = 0;                      // whole-frame shift used when both sides run at the same rate
