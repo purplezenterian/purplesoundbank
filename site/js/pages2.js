@@ -51,15 +51,13 @@
           h('div', null, h('div', { style: 'font-weight:700;font-size:18px' }, '\u2728 ' + fresh.length + ' new patch' + (fresh.length === 1 ? '' : 'es')), h('div', { class: 'muted small' }, fresh.map(x => x.name).join(' \u2022 '))),
           h('span', null, h('a', { class: 'btn primary small', href: '#/play', style: 'margin-right:8px', onclick: mark }, 'Try them'), h('button', { class: 'btn small', onclick: () => { mark(); patchBox.replaceChildren(); } }, 'Dismiss')))));
     }).catch(() => {});
-    api.listPosts({ category: null }).then(r => {   // announcement banner: the newest pinned post, until they close it
-      const top = (r.pinned || [])[0]; if (!top) return;
+    api.listPosts({ category: null }).then(r => {   // announcement banner: the newest pinned text post, shown in full, until they close it
+      const top = (r.pinned || []).find(x => !linkOnly(x.body)); if (!top) return;
       let seen = null; try { seen = localStorage.getItem('site.ann'); } catch (e) {}
       if (String(seen) === String(top.id)) return;
-      const lo = linkOnly(top.body);
       annBox.replaceChildren(h('div', { class: 'card', style: 'margin-bottom:14px;border-color:var(--glow)' },
-        h('div', { class: 'meta' }, h('span', { class: 'pill pin' }, 'New')),
-        h('h3', { style: 'margin:6px 0' }, top.title), h('p', { class: 'muted', style: 'margin:0 0 10px' }, lo ? '' : String(top.body || '').slice(0, 220)),
-        h('div', { class: 'row' }, h('a', Object.assign({ class: 'btn primary small', href: lo ? lo.href : '#/hub/post/' + top.id }, lo && lo.ext ? { target: '_blank', rel: 'noopener noreferrer' } : {}), 'Read more'),
+        h('div', { class: 'row', style: 'justify-content:space-between;align-items:flex-start;gap:12px' },
+          h('div', null, h('div', { style: 'font-weight:700;font-size:18px;margin-bottom:4px' }, top.title), h('div', { style: 'white-space:pre-wrap' }, String(top.body || ''))),
           h('button', { class: 'btn small', onclick: () => { try { localStorage.setItem('site.ann', String(top.id)); } catch (e) {} annBox.replaceChildren(); } }, 'Dismiss'))));
     }).catch(() => {});
     let before = null;
