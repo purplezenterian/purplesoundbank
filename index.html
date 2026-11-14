@@ -279,7 +279,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
 
 <div class="top">
   <div class="brand"><div class="mark" aria-hidden="true"></div><h1>Purple SoundBank</h1></div>
-  <div class="chips"><button class="chip" id="daw-chip" type="button" aria-label="DAW link: output and recording"><span class="dot"></span><span class="txt">Link to DAW</span></button>
+  <div class="chips"><button class="chip" id="daw-chip" type="button" aria-label="Use in your DAW: get the plugin"><span class="dot"></span><span class="txt">Use in DAW</span></button>
   <button class="chip" id="midi-chip" type="button"><span class="dot"></span><span class="txt" id="midi-text">Checking MIDI</span></button></div>
 </div>
 <p class="hint" id="hint" hidden>Tap a key to turn the sound on.</p>
@@ -2547,7 +2547,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
       const btn = (label, cls, fn, dis) => { const b = el('button', 'big ' + (cls || ''), label); b.type = 'button'; if (dis) b.disabled = true; b.addEventListener('click', fn); return b; };
       const sheet = el('div', 'sheet');
       const x = el('button', 'x', '×'); x.type = 'button'; x.setAttribute('aria-label', 'Close'); x.addEventListener('click', () => panel.classList.remove('open'));
-      const h = el('h3', '', 'Link to DAW'); h.prepend(x); sheet.append(h);
+      const h = el('h3', '', 'Use in DAW'); h.prepend(x); sheet.append(h);
       // PSB Bridge: the plugin inside the DAW
       sheet.append(el('div', 'sub', 'PSB Bridge (plugin in your DAW)'));
       const bst = el('div', 'stat'); bst.innerHTML = 'Bridge: <b></b>';
@@ -2566,6 +2566,8 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
     const dawLocked = () => Array.isArray(window.PSB_LOCKED) && window.PSB_LOCKED.length > 0;
     chip.addEventListener('click', () => {
       if (dawLocked()) { try { window.parent.postMessage({ psb: 'upgrade', sound: 'dawlink' }, '*'); } catch (e) {} return; }
+      // On a Mac the plugin holds the whole instrument, so this button simply takes members to the free download.
+      if (/Mac/i.test(navigator.platform || '') && !dawLocked()) { window.open(BRIDGE_PAGE, '_blank', 'noopener'); return; }
       // First time: take them to the free PSB Bridge download. After that: the link panel.
       if (bridge.state !== 'connected' && !store.get('bridge.got', false)) { store.set('bridge.got', true); window.open(BRIDGE_PAGE, '_blank', 'noopener'); return; }
       draw(); panel.classList.add('open');
