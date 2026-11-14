@@ -821,7 +821,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
     // Mono sounds (basses, leads): a new note cuts the one still sounding, so only one voice plays at a time.
     // Mono sounds: a new note takes over from the one still sounding. If one is sounding the move is legato: the old note
     // melts away while the new one comes in softly from the steady part of the sound, with no fresh attack.
-    for (const mc of channels) { mc.legatoNow = false; mc.reuse = null; if (mc.monoVoice && mc.ready && !mc.off && !mc.mute) for (const o of [...active.values(), ...sustained]) for (const p of o.parts) if (p.ch === mc) { const hard = mc.retrig || (mc.retrigVel && vel >= mc.retrigVel); mc.legatoNow = !hard; if (mc.glideVoice && !hard && Math.abs(note + mc.shift - p.k) <= 6) { (mc.reuse = mc.reuse || []).push({ p, o }); continue; } try { if (mc.holdFix) holdAt(p.g.gain, t); else { p.g.gain.cancelScheduledValues(t); p.g.gain.setValueAtTime(p.g.gain.value, t); } p.g.gain.setTargetAtTime(0, t, hard ? 0.004 : mc.legato ? mc.legato.out : 0.022); p.s.stop(t + (hard ? 0.05 : mc.legato ? 8 * mc.legato.out : 0.2)); } catch (e) {} } }
+    for (const mc of channels) { mc.legatoNow = false; mc.reuse = null; if (mc.monoVoice && mc.ready && !mc.off && !mc.mute) for (const o of [...active.values(), ...sustained]) for (const p of o.parts) if (p.ch === mc && !p.dead) { const hard = mc.retrig || (mc.retrigVel && vel >= mc.retrigVel); mc.legatoNow = !hard; if (mc.glideVoice && !hard && Math.abs(note + mc.shift - p.k) <= 6) { (mc.reuse = mc.reuse || []).push({ p, o }); continue; } try { if (mc.holdFix) holdAt(p.g.gain, t); else { p.g.gain.cancelScheduledValues(t); p.g.gain.setValueAtTime(p.g.gain.value, t); } p.dead = true; p.g.gain.setTargetAtTime(0, t, hard ? 0.004 : mc.legato ? mc.legato.out : 0.022); p.s.stop(t + (hard ? 0.05 : mc.legato ? 8 * mc.legato.out : 0.2)); } catch (e) {} } }
     const shape = velShape(note, vel);
     const amp = shape.amp;
     const parts = [];
@@ -1008,6 +1008,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
     unhold(v);
     const t = (schedAt !== null ? schedAt : ctx.currentTime);
     for (const p of v.parts) {
+      p.dead = true;
       const rEff = p.ch.relPow ? Math.min(30, p.ch.env0.r * Math.pow(p.ch.env.r / p.ch.env0.r, p.ch.relPow)) : p.ch.env.r;
       const tau = Math.max(0.005, rEff / 4);
       if (p.ch.holdFix || schedAt !== null) holdAt(p.g.gain, t);
