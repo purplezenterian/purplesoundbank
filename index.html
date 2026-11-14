@@ -2457,6 +2457,17 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
     B.setMute = on => { B.muteLocal = on; store.set('bridge.mute', on); if (ws) localOut(!on); B.onChange(); };
     window.__psbBridge = B;
     if (EMB) setTimeout(() => B.connect(), 300);
+    // In the plugin, quietly save every sound this member can play on this computer, one after another.
+    if (EMB) setTimeout(async () => {
+      try {
+        const locked = Array.isArray(window.PSB_LOCKED) ? window.PSB_LOCKED : [];
+        for (const sd of (window.SOUNDS || [])) {
+          if (locked.includes(sd.name) || locked.includes(sd.id) || !sd.src) continue;
+          try { await window.parent.__psbSound(sd.id); } catch (e) {}
+          await new Promise(r => setTimeout(r, 500));
+        }
+      } catch (e) {}
+    }, 8000);
     if (want) setTimeout(B.connect, 1200);
     return B;
   })();

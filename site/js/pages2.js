@@ -202,7 +202,7 @@
       if (firstRun) localStorage.setItem('psb.off', JSON.stringify(ALL)); } catch (e) {}
     // The instrument loads each sound's audio on demand: it asks this page, which checks the plan and returns just that sound.
     window.__psbSound = async id => {
-      const cache = A.offline && A.offline.eligible(S.profile);
+      const cache = (A.offline && A.offline.eligible(S.profile)) || !!window.__psbPlugin;
       if (A.offlinePlay) { const d = await A.offline.sound(id); if (d) return d; throw new Error('That sound is not saved on this device'); }
       try {
         const res = await fetch(await api.soundUrl(id)); if (!res.ok) throw new Error('sound ' + res.status);
