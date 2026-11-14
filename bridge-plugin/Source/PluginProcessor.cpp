@@ -450,11 +450,11 @@ void PSBBridgeProcessor::nativeProcess (juce::AudioBuffer<float>& buffer, juce::
         const int sp = juce::jlimit (0, n, meta.samplePosition);
         if (sp > pos) { engine.render (L + pos, R + pos, sp - pos); pos = sp; }
         const auto m = meta.getMessage();
-        if (m.isNoteOn()) engine.noteOn (m.getNoteNumber(), m.getVelocity());
-        else if (m.isNoteOff()) engine.noteOff (m.getNoteNumber());
-        else if (m.isController()) engine.controller (m.getControllerNumber(), m.getControllerValue());
-        else if (m.isPitchWheel()) engine.pitchBend (m.getPitchWheelValue());
-        else if (m.isAllNotesOff() || m.isAllSoundOff()) engine.allNotesOff();
+        if (m.isNoteOn()) engine.noteOnRT (m.getNoteNumber(), m.getVelocity());
+        else if (m.isNoteOff()) engine.noteOffRT (m.getNoteNumber());
+        else if (m.isController()) engine.controllerRT (m.getControllerNumber(), m.getControllerValue());
+        else if (m.isPitchWheel()) engine.pitchBendRT (m.getPitchWheelValue());
+        else if (m.isAllNotesOff() || m.isAllSoundOff()) engine.allNotesOffRT();
         // the page shows what the host plays (keys, wheels): it does not make sound
         if (m.getRawDataSize() >= 1 && m.getRawDataSize() <= 3)
         {

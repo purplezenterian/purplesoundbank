@@ -3,6 +3,7 @@
 #include <cstring>
 #include <set>
 #include <mutex>
+#include <atomic>
 
 namespace psb {
 
@@ -189,8 +190,49 @@ struct Channel {
     bool ensOn() const { return def.ensemble; }
 };
 
+// A control message for the audio thread. Everything from the page goes through a lock-free queue and is applied
+// by the audio thread itself at the start of a block, so the audio thread never waits for anyone.
+struct Cmd {
+    enum { CH, ENV, FX, MASTER, GFX, NOTEON, NOTEOFF, CC, BEND, ALLOFF } t = CH;
+    char id[48] = {0};
+    double a = 0, b = 0, c = 0, d = 0;
+    int i = 0, j = 0;
+};
+
 struct Engine::Impl {
-    std::mutex mtx;
+    std::mutex mtx;    // only for rare structural changes (loading sounds, prepare); the audio thread only ever try-locks it
+    std::mutex dmtx;   // guards defs for the non-audio threads
+    std::mutex rmtx;   // guards readyIds for the non-audio threads
+    std::set<std::string> readyIds;
+    static constexpr uint32_t QN = 16384, HN = 512;
+    std::vector<Cmd> q = std::vector<Cmd>(QN);
+    std::atomic<uint32_t> qr{0}, qw{0};
+    std::atomic_flag qlock = ATOMIC_FLAG_INIT;
+    Cmd hq[HN]; uint32_t hr = 0, hw = 0;   // audio thread's own host-MIDI queue (no sharing at all)
+    std::vector<Channel*> scratchCh;
+    std::vector<Voice*> scratchA, scratchB;
+    bool push(const Cmd& cm) {
+        while (qlock.test_and_set(std::memory_order_acquire)) {}   // producers only: the message thread and loader threads
+        const uint32_t w = qw.load(std::memory_order_relaxed);
+        const bool ok = (w - qr.load(std::memory_order_acquire)) < QN;
+        if (ok) { q[w % QN] = cm; qw.store(w + 1, std::memory_order_release); }
+        qlock.clear(std::memory_order_release);
+        return ok;
+    }
+    void pushRT(const Cmd& cm) { if (hw - hr < HN) { hq[hw % HN] = cm; ++hw; } }
+    void apply(const Cmd& cm);
+    void drain() {
+        uint32_t r = qr.load(std::memory_order_relaxed);
+        const uint32_t w = qw.load(std::memory_order_acquire);
+        while (r != w) { apply(q[r % QN]); ++r; qr.store(r, std::memory_order_release); }
+        while (hr != hw) { apply(hq[hr % HN]); ++hr; }
+    }
+    static Cmd mk(int t, const std::string& id = std::string()) {
+        Cmd cm; cm.t = (decltype(cm.t)) t;
+        const size_t n = std::min<size_t>(id.size(), sizeof(cm.id) - 1);
+        std::memcpy(cm.id, id.data(), n); cm.id[n] = 0;
+        return cm;
+    }
     std::vector<SoundDef> defs;
     double sr = 48000;
     std::vector<std::unique_ptr<Channel>> chs;
@@ -280,9 +322,8 @@ struct Engine::Impl {
     void unhold(Voice* v) {
         if (v->unheld) return;
         v->unheld = true;
-        std::set<Channel*> cs;
-        for (Layer* p : v->parts) { if (p->ch->def.poly && p->polyCounted) { p->ch->held = std::max(0, p->ch->held - 1); } cs.insert(p->ch); }
-        for (Channel* c : cs) polyUpdate(*c);
+        for (Layer* p : v->parts) if (p->ch->def.poly && p->polyCounted) p->ch->held = std::max(0, p->ch->held - 1);
+        for (Layer* p : v->parts) polyUpdate(*p->ch);
     }
 
     void startRelease(Layer* p, double tau) {
@@ -317,12 +358,14 @@ struct Engine::Impl {
         return false;
     }
 
-    void buildChannels(const std::vector<SoundDef>& defs);
+    std::vector<std::unique_ptr<Channel>> makeChannels(const std::vector<SoundDef>& defs);
+    void adopt(std::vector<std::unique_ptr<Channel>> fresh);
+    std::map<std::string, std::unique_ptr<Channel>> retired;
     void allOff();
     void doNoteOn(int src, int note, int vel, bool monoOnly);
     void doNoteOff(int src);
     void updateFilters();
-    void syncPedal() { if (!pedalOn()) { auto copy = sustained; for (auto* v : copy) releaseVoice(v); } }
+    void syncPedal() { if (!pedalOn()) { scratchB.assign(sustained.begin(), sustained.end()); for (auto* v : scratchB) releaseVoice(v); } }
     void gcLayers();
     void applyMix();
 };
@@ -382,10 +425,12 @@ void Engine::prepare(double sampleRate) {
     Impl& E = *d;
     std::lock_guard<std::mutex> lk(E.mtx);
     E.sr = sampleRate;
-    E.layers.assign(640, Layer());
-    E.voices.assign(320, Voice());
-    for (auto& v : E.voices) v.parts.reserve(48);
+    if (E.layers.size() != 640) E.layers.assign(640, Layer()); else for (auto& l : E.layers) l = Layer();
+    if (E.voices.size() != 320) { E.voices.assign(320, Voice()); for (auto& v : E.voices) v.parts.reserve(48); }
+    else for (auto& v : E.voices) { v.used = false; v.parts.clear(); }
     E.active.clear(); E.sustained.clear(); E.monoHeld.clear();
+    E.active.reserve(512); E.sustained.reserve(512); E.monoHeld.reserve(128);
+    E.scratchA.reserve(512); E.scratchB.reserve(512); E.scratchCh.reserve(128);
     E.bendS.init(0, 0.008, sampleRate); E.modS.init(0, 0.02, sampleRate); E.vibModS.init(0, 0.015, sampleRate);
     E.masterG.init(E.masterWant, 0.005, sampleRate); E.outMute.init(E.muteWant, 0.02, sampleRate);
     E.hp.set(BQ_HP, sampleRate, 1.0, 0.7, 0); E.hp.reset();
@@ -393,21 +438,18 @@ void Engine::prepare(double sampleRate) {
     E.lim.prepare(sampleRate, -3, 0, 20, 0.001, 0.12);
     E.limFix = 1.0 / std::pow(1.0 / std::pow(10.0, (-3 + 3.0 / 20) / 20), 0.6);
     E.mL.assign(Impl::BLK, 0.f); E.mR.assign(Impl::BLK, 0.f);
-    if (!E.defs.empty()) E.buildChannels(E.defs);
+    if (!E.defs.empty()) { auto fresh = E.makeChannels(E.defs); E.adopt(std::move(fresh)); }
 }
 
 int Engine::latencySamples() const { return d->comp.latency() + d->lim.latency(); }
 
-void Engine::Impl::buildChannels(const std::vector<SoundDef>& defs) {
+// Builds the channels (all the memory) without touching the running engine, so no lock is needed for it.
+std::vector<std::unique_ptr<Channel>> Engine::Impl::makeChannels(const std::vector<SoundDef>& defs) {
     Impl& E = *this;
-    std::map<std::string, std::unique_ptr<Channel>> old;
-    for (auto& c : E.chs) old[c->def.id] = std::move(c);
-    E.chs.clear();
-    for (auto& l : E.layers) l = Layer();
-    for (auto& v : E.voices) { v.used = false; v.parts.clear(); }
-    E.active.clear(); E.sustained.clear(); E.monoHeld.clear();
+    std::vector<std::unique_ptr<Channel>> out;
     for (const auto& s : defs) {
         auto c = std::make_unique<Channel>();
+        c->vox.reserve(160);
         c->def = s;
         c->env0.r = std::round((s.rel > 0 ? s.rel : 0.09) * 4 * 100.0) / 100.0;
         c->env = c->env0;
@@ -430,29 +472,50 @@ void Engine::Impl::buildChannels(const std::vector<SoundDef>& defs) {
             const double n = s.mk0;
             if (n <= 0.5) c->fxo.cutoff = 80.0 * std::pow(20000.0 / 80.0, n * 2.0);
         }
-        auto it = old.find(s.id);
+        out.push_back(std::move(c));
+    }
+    return out;
+}
+// Quick part, under the lock: moves what was loaded across and swaps the new channels in.
+void Engine::Impl::adopt(std::vector<std::unique_ptr<Channel>> fresh) {
+    Impl& E = *this;
+    std::map<std::string, std::unique_ptr<Channel>> old;
+    for (auto& c : E.chs) old[c->def.id] = std::move(c);
+    E.chs.clear();
+    for (auto& l : E.layers) l = Layer();
+    for (auto& v : E.voices) { v.used = false; v.parts.clear(); }
+    E.active.clear(); E.sustained.clear(); E.monoHeld.clear();
+    for (auto& c : fresh) {
+        auto it = old.find(c->def.id);
         if (it != old.end()) {   // keep what was loaded and how it was set
             Channel& o = *it->second;
             c->pcm = std::move(o.pcm); c->keys = std::move(o.keys); c->ready = o.ready;
             c->mute = o.mute; c->off = o.off; c->solo = o.solo; c->vol = o.vol; c->env = o.env;
-            if (!s.hasModKnob) c->fxo = o.fxo;
+            if (!c->def.hasModKnob) c->fxo = o.fxo;
         }
         E.chs.push_back(std::move(c));
     }
     E.applyMix();
     for (auto& c : E.chs) { c->outG.cur = c->outG.target; }
+    retired.swap(old);   // freed later, off the lock
 }
 void Engine::defineSounds(const std::vector<SoundDef>& defs) {
     Impl& E = *d;
-    std::lock_guard<std::mutex> lk(E.mtx);
-    E.defs = defs;
-    E.buildChannels(defs);
+    { std::lock_guard<std::mutex> lk(E.dmtx); E.defs = defs; }
+    auto fresh = E.makeChannels(defs);   // the memory is built here, outside the lock
+    std::map<std::string, std::unique_ptr<Channel>> gone;
+    {
+        std::lock_guard<std::mutex> lk(E.mtx);
+        E.adopt(std::move(fresh));
+        gone.swap(E.retired);
+    }
+    { std::lock_guard<std::mutex> lk(E.rmtx); E.readyIds.clear(); for (auto& ch : E.chs) if (ch->ready) E.readyIds.insert(ch->def.id); }
 }
 
 bool Engine::prepareSamples(const std::string& id, std::map<int, Pcm>& samples) const {
     const SoundDef* def = nullptr;
-    { std::lock_guard<std::mutex> lk(d->mtx); for (auto& x : d->defs) if (x.id == id) def = &x; if (!def) return false; }
-    const SoundDef D = *def;
+    SoundDef D;
+    { std::lock_guard<std::mutex> lk(d->dmtx); for (auto& x : d->defs) if (x.id == id) def = &x; if (!def) return false; D = *def; }
     if (D.loop.has) for (auto& kv : samples) makeLoop(kv.second, D.loop);
     return !samples.empty();
 }
@@ -471,31 +534,24 @@ void Engine::installSamples(const std::string& id, std::map<int, Pcm>&& samples)
         std::sort(c->keys.begin(), c->keys.end());
         c->ready = !c->keys.empty();
     }
+    { Channel* cc = nullptr; bool rd = false; { std::lock_guard<std::mutex> lk(d->mtx); cc = d->find(id); rd = cc && cc->ready; }
+      std::lock_guard<std::mutex> lk(d->rmtx); if (rd) d->readyIds.insert(id); else d->readyIds.erase(id); }
 }
 void Engine::setSamples(const std::string& id, std::map<int, Pcm>&& samples) { prepareSamples(id, samples); installSamples(id, std::move(samples)); }
-bool Engine::hasSamples(const std::string& id) const { std::lock_guard<std::mutex> lk(d->mtx); Channel* c = d->find(id); return c && c->ready; }
+bool Engine::hasSamples(const std::string& id) const { std::lock_guard<std::mutex> lk(d->rmtx); return d->readyIds.count(id) > 0; }
 
 void Engine::setChannel(const std::string& id, bool on, double vol, bool solo) {
-    std::lock_guard<std::mutex> lk(d->mtx);
-    Channel* c = d->find(id); if (!c) return;
-    c->off = !on; c->mute = !on; c->solo = solo; c->vol = vol;
-    d->applyMix();
+    Cmd m = Impl::mk(Cmd::CH, id); m.i = on ? 1 : 0; m.j = solo ? 1 : 0; m.a = vol; d->push(m);
 }
 void Engine::setChannelEnv(const std::string& id, double a, double dd, double s, double r) {
-    std::lock_guard<std::mutex> lk(d->mtx);
-    Channel* c = d->find(id); if (!c) return; c->env.a = a; c->env.d = dd; c->env.s = s; c->env.r = r;
+    Cmd m = Impl::mk(Cmd::ENV, id); m.a = a; m.b = dd; m.c = s; m.d = r; d->push(m);
 }
 void Engine::setChannelFx(const std::string& id, double cutoff, double reso, double env, double glide) {
-    std::lock_guard<std::mutex> lk(d->mtx);
-    Channel* c = d->find(id); if (!c) return;
-    if (!c->def.hasModKnob) c->fxo.cutoff = cutoff;   // a sound with a mod-wheel cutoff follows the wheel here
-    c->fxo.reso = reso; c->fxo.env = env; c->fxo.glide = glide;
-    d->updateFilters();
+    Cmd m = Impl::mk(Cmd::FX, id); m.a = cutoff; m.b = reso; m.c = env; m.d = glide; d->push(m);
 }
-void Engine::setMaster(double gain, bool mute) { std::lock_guard<std::mutex> lk(d->mtx); d->masterWant = gain; d->muteWant = mute ? 0.0 : 1.0; d->masterG.target = gain; d->outMute.target = d->muteWant; }
+void Engine::setMaster(double gain, bool mute) { Cmd m = Impl::mk(Cmd::MASTER); m.a = gain; m.i = mute ? 1 : 0; d->push(m); }
 void Engine::setGlobalFx(double cutoff, double reso, double env, double glide) {
-    std::lock_guard<std::mutex> lk(d->mtx);
-    d->fx.cutoff = cutoff; d->fx.reso = reso; d->fx.env = env; d->fx.glide = glide; d->updateFilters();
+    Cmd m = Impl::mk(Cmd::GFX); m.a = cutoff; m.b = reso; m.c = env; m.d = glide; d->push(m);
 }
 
 void Engine::Impl::applyMix() {
@@ -520,29 +576,56 @@ void Engine::Impl::updateFilters() {
 }
 
 // MIDI ---------------------------------------------------------------------------------------
-void Engine::noteOn(int note, int vel) { std::lock_guard<std::mutex> lk(d->mtx); d->doNoteOn(note, note, vel, false); }
-void Engine::noteOff(int note) { std::lock_guard<std::mutex> lk(d->mtx); d->doNoteOff(note); }
-void Engine::controller(int cc, int val) {
-    Impl& E = *d;
-    std::lock_guard<std::mutex> lk(E.mtx);
-    if (cc == 1) { E.modVal = val / 127.0; E.modS.target = E.modVal; E.vibModS.target = E.modVal;
-        for (auto& c : E.chs) if (c->def.hasModKnob) {   // the wheel drives this sound's own cutoff knob
-            const double n = c->def.mk0 + (c->def.mk1 - c->def.mk0) * E.modVal;
-            c->fxo.cutoff = n <= 0.5 ? 80.0 * std::pow(20000.0 / 80.0, n * 2.0) : 20000.0;
+void Engine::noteOn(int note, int vel) { Cmd m = Impl::mk(Cmd::NOTEON); m.i = note; m.j = vel; d->push(m); }
+void Engine::noteOff(int note) { Cmd m = Impl::mk(Cmd::NOTEOFF); m.i = note; d->push(m); }
+void Engine::controller(int cc, int val) { Cmd m = Impl::mk(Cmd::CC); m.i = cc; m.j = val; d->push(m); }
+void Engine::pitchBend(int v14) { Cmd m = Impl::mk(Cmd::BEND); m.i = v14; d->push(m); }
+void Engine::allNotesOff() { d->push(Impl::mk(Cmd::ALLOFF)); }
+void Engine::noteOnRT(int note, int vel) { Cmd m = Impl::mk(Cmd::NOTEON); m.i = note; m.j = vel; d->pushRT(m); }
+void Engine::noteOffRT(int note) { Cmd m = Impl::mk(Cmd::NOTEOFF); m.i = note; d->pushRT(m); }
+void Engine::controllerRT(int cc, int val) { Cmd m = Impl::mk(Cmd::CC); m.i = cc; m.j = val; d->pushRT(m); }
+void Engine::pitchBendRT(int v14) { Cmd m = Impl::mk(Cmd::BEND); m.i = v14; d->pushRT(m); }
+void Engine::allNotesOffRT() { d->pushRT(Impl::mk(Cmd::ALLOFF)); }
+
+// Runs on the audio thread only.
+void Engine::Impl::apply(const Cmd& m) {
+    Impl& E = *this;
+    switch (m.t) {
+        case Cmd::CH: { Channel* c = E.find(m.id); if (!c) break; c->off = !m.i; c->mute = !m.i; c->solo = m.j != 0; c->vol = m.a; E.applyMix(); break; }
+        case Cmd::ENV: { Channel* c = E.find(m.id); if (!c) break; c->env.a = m.a; c->env.d = m.b; c->env.s = m.c; c->env.r = m.d; break; }
+        case Cmd::FX: {
+            Channel* c = E.find(m.id); if (!c) break;
+            if (!c->def.hasModKnob) c->fxo.cutoff = m.a;   // a sound with a mod-wheel cutoff follows the wheel here
+            c->fxo.reso = m.b; c->fxo.env = m.c; c->fxo.glide = m.d;
+            E.updateFilters(); break;
         }
-        E.updateFilters();
+        case Cmd::MASTER: E.masterWant = m.a; E.muteWant = m.i ? 0.0 : 1.0; E.masterG.target = m.a; E.outMute.target = E.muteWant; break;
+        case Cmd::GFX: E.fx.cutoff = m.a; E.fx.reso = m.b; E.fx.env = m.c; E.fx.glide = m.d; E.updateFilters(); break;
+        case Cmd::NOTEON: E.doNoteOn(m.i, m.i, m.j, false); break;
+        case Cmd::NOTEOFF: E.doNoteOff(m.i); break;
+        case Cmd::ALLOFF: E.allOff(); break;
+        case Cmd::BEND: E.bendS.target = ((double) m.i / 8192.0 - 1.0) * 200.0; break;
+        case Cmd::CC: {
+            const int cc = m.i, val = m.j;
+            if (cc == 1) { E.modVal = val / 127.0; E.modS.target = E.modVal; E.vibModS.target = E.modVal;
+                for (auto& c : E.chs) if (c->def.hasModKnob) {   // the wheel drives this sound's own cutoff knob
+                    const double n = c->def.mk0 + (c->def.mk1 - c->def.mk0) * E.modVal;
+                    c->fxo.cutoff = n <= 0.5 ? 80.0 * std::pow(20000.0 / 80.0, n * 2.0) : 20000.0;
+                }
+                E.updateFilters();
+            }
+            else if (cc == 64) { E.midiPedal = val >= 64; E.syncPedal(); }
+            else if (cc == 123 || cc == 120) E.allOff();
+            else if (cc == 121) { E.bendS.target = 0; E.modVal = 0; E.modS.target = 0; E.midiPedal = false; E.syncPedal(); }
+            break;
+        }
     }
-    else if (cc == 64) { E.midiPedal = val >= 64; E.syncPedal(); }
-    else if (cc == 123 || cc == 120) E.allOff();
-    else if (cc == 121) { E.bendS.target = 0; E.modVal = 0; E.modS.target = 0; E.midiPedal = false; E.syncPedal(); }
 }
-void Engine::pitchBend(int v14) { std::lock_guard<std::mutex> lk(d->mtx); d->bendS.target = ((double) v14 / 8192.0 - 1.0) * 200.0; }
 void Engine::Impl::allOff() {
-    auto copy = active;
-    for (Voice* v : copy) doNoteOff(v->src);
+    scratchA.assign(active.begin(), active.end());
+    for (Voice* v : scratchA) doNoteOff(v->src);
     monoHeld.clear();
 }
-void Engine::allNotesOff() { std::lock_guard<std::mutex> lk(d->mtx); d->allOff(); }
 
 void Engine::Impl::doNoteOn(int src, int note, int vel, bool monoOnly) {
     if (!monoOnly && monoActive()) {
@@ -574,13 +657,14 @@ void Engine::Impl::doNoteOn(int src, int note, int vel, bool monoOnly) {
         const SoundDef& D = ch.def;
         const int nt = note + (int) D.shift;
         const int k = nearestKey(ch.keys, nt);
-        const Pcm& pcm = ch.pcm[k];
-        std::vector<int> lay; // -1, 1 | 0 | 2 = sub
-        if (D.fat) { lay.push_back(-1); lay.push_back(1); } else lay.push_back(0);
+        const Pcm& pcm = ch.pcm.find(k)->second;
+        int lay[3], nlay = 0; // -1, 1 | 0 | 2 = sub
+        if (D.fat) { lay[nlay++] = -1; lay[nlay++] = 1; } else lay[nlay++] = 0;
         const double leDepth = D.lowEnd ? std::min(1.0, std::max(0.0, (D.leBelow - nt) / 12.0)) : 0.0;
         const double subFade = std::min(1.0, std::max(0.0, (nt - 30) / 6.0));
-        if (leDepth > 0.02 && D.lowEnd && D.leSub > 0 && subFade > 0.02) lay.push_back(2);
-        for (int dOff : lay) {
+        if (leDepth > 0.02 && D.lowEnd && D.leSub > 0 && subFade > 0.02) lay[nlay++] = 2;
+        for (int li = 0; li < nlay; ++li) {
+            const int dOff = lay[li];
             const bool isSub = dOff == 2;
             Layer* L = allocLayer();
             if (!L) break;
@@ -651,9 +735,10 @@ void Engine::Impl::doNoteOn(int src, int note, int vel, bool monoOnly) {
     }
     active.push_back(v);
     // poly sound caps (held + ringing tails)
-    std::set<Channel*> pcs;
-    for (Layer* p : v->parts) if (p->ch->def.poly) pcs.insert(p->ch);
-    for (Channel* ch : pcs) {
+    scratchCh.clear();
+    for (Layer* p : v->parts) if (p->ch->def.poly && std::find(scratchCh.begin(), scratchCh.end(), p->ch) == scratchCh.end()) scratchCh.push_back(p->ch);
+    for (size_t pi = 0; pi < scratchCh.size(); ++pi) {
+        Channel* ch = scratchCh[pi];
         ch->vox.push_back(v);
         if (ch->vox.size() > 80) ch->vox.erase(ch->vox.begin(), ch->vox.begin() + (ch->vox.size() - 80));
         while (ch->alive > 110 && ch->vox.size() > 1) {
@@ -721,8 +806,8 @@ void Engine::testChain(float* L, float* R, int n) {
         L[i] = guard(L[i] * (float) E.limFix); R[i] = guard(R[i] * (float) E.limFix);
     }
 }
-void Engine::setTestMode(bool on) { std::lock_guard<std::mutex> lk(d->mtx); d->testMode = on; }
-int Engine::activeLayers() const { std::lock_guard<std::mutex> lk(d->mtx); int n = 0; for (auto& l : d->layers) if (l.used && !l.dead) n++; return n; }
+void Engine::setTestMode(bool on) { d->testMode = on; }
+int Engine::activeLayers() const { int n = 0; for (auto& l : d->layers) if (l.used && !l.dead) n++; return n; }
 
 // ---------------------------------------------------------------------------------------------
 // Rendering
@@ -737,7 +822,12 @@ static inline float hermite(const float* a, int n, double p) {
 
 void Engine::render(float* outL, float* outR, int n) {
     Impl& E = *d;
-    std::lock_guard<std::mutex> lk(E.mtx);
+    // The audio thread never waits: if a rare structural change (loading a sound) holds the lock, wait a few
+    // microseconds, and only then give up on this one block.
+    std::unique_lock<std::mutex> lk(E.mtx, std::try_to_lock);
+    for (int spin = 0; !lk.owns_lock() && spin < 4000; ++spin) (void) lk.try_lock();
+    if (!lk.owns_lock()) { std::fill(outL, outL + n, 0.f); std::fill(outR, outR + n, 0.f); return; }
+    E.drain();
     const double sr = E.sr;
     for (int s0 = 0; s0 < n; s0 += Impl::BLK) {
         const int m = std::min(Impl::BLK, n - s0);

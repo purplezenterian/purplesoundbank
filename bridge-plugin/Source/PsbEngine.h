@@ -111,6 +111,12 @@ public:
     void controller(int cc, int val);
     void pitchBend(int v14);
     void allNotesOff();
+    // Same as above, but only for the audio thread (the host's own MIDI): never touches a lock or allocates.
+    void noteOnRT(int note, int vel);
+    void noteOffRT(int note);
+    void controllerRT(int cc, int val);
+    void pitchBendRT(int v14);
+    void allNotesOffRT();
 
     void render(float* outL, float* outR, int n);   // call between events
     int activeLayers() const;
