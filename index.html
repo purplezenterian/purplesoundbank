@@ -732,6 +732,8 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
   // A sound can have its own vibrato speed ('vibRate', Hz) and depth ('vib', cents at full wheel): its own LFO, run by the mod wheel.
   // Freezes a gain at the value it really has right now. Reading .value is up to a few ms behind, which on a note that is
   // still in its first few ms of attack makes the gain jump back down (a click when notes arrive almost together).
+  // Scheduled mode: the DAW plugin sends each note with the exact moment it should sound, so notes land sample-accurately.
+  let schedAt = null;
   function holdAt(g, t) {
     try { if (g.cancelAndHoldAtTime) { g.cancelAndHoldAtTime(t); return; } } catch (e) {}
     const cur = g.value; g.cancelScheduledValues(t); g.setValueAtTime(cur, t);
@@ -781,7 +783,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
     const glideFrom = lastGlideNote; lastGlideNote = note;
     const prev = active.get(src);
     if (prev && !prev.up) noteOff(src);
-    const t = ctx.currentTime;
+    const t = (schedAt !== null ? schedAt : ctx.currentTime);
     // Mono sounds (basses, leads): a new note cuts the one still sounding, so only one voice plays at a time.
     // Mono sounds: a new note takes over from the one still sounding. If one is sounding the move is legato: the old note
     // melts away while the new one comes in softly from the steady part of the sound, with no fresh attack.
@@ -950,11 +952,11 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
 
   function release(v) {
     unhold(v);
-    const t = ctx.currentTime;
+    const t = (schedAt !== null ? schedAt : ctx.currentTime);
     for (const p of v.parts) {
       const rEff = p.ch.relPow ? Math.min(30, p.ch.env0.r * Math.pow(p.ch.env.r / p.ch.env0.r, p.ch.relPow)) : p.ch.env.r;
       const tau = Math.max(0.005, rEff / 4);
-      if (p.ch.holdFix) holdAt(p.g.gain, t);
+      if (p.ch.holdFix || schedAt !== null) holdAt(p.g.gain, t);
       else { const cur = p.g.gain.value; p.g.gain.cancelScheduledValues(t); p.g.gain.setValueAtTime(cur, t); }
       p.g.gain.setTargetAtTime(0, t, tau);
       try { p.s.stop(t + Math.max(0.3, tau * 7 + 0.05)); } catch (e) {}
@@ -2341,18 +2343,57 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
   /* ---------- PSB Bridge: link to the plugin inside a DAW (audio out, notes in, tempo) ---------- */
   const bridge = (() => {
     const PORTS = [48210, 48211, 48212, 48213, 48214, 48215, 48216, 48217, 48218, 48219];
-    const B = { state: 'off', port: 0, info: null, transport: null, muteLocal: store.get('bridge.mute', true), frames: 0, onChange: () => {} };
+    const B = { v2: false, tapShift: 0, chainDelay: 0.016, base: null, state: 'off', port: 0, info: null, transport: null, muteLocal: store.get('bridge.mute', true), frames: 0, onChange: () => {} };
     let ws = null, sp = null, zero = null, want = store.get('bridge.on', false), retry = 0, seq = 0;
     const set = (st, extra) => { B.state = st; if (extra !== undefined) B.info = extra; B.onChange(); };
     function localOut(on) { try { outTrim.disconnect(ctx.destination); } catch (e) {} if (on) outTrim.connect(ctx.destination); }
     function tap() {
       if (sp) return;
       sp = ctx.createScriptProcessor(1024, 2, 2); zero = ctx.createGain(); zero.gain.value = 0;
+      // Measure, on this very computer, where a moment on the page's clock lands inside the tapped audio:
+      // a one-sample click is injected into the tap only (never heard), found, and removed again.
+      const cal = { done: false, T: 0 };
+      B.tapShift = 1024 / ctx.sampleRate;
+      // The master chain (compressor, limiter, guard) delays the sound by a fixed few milliseconds. Measure it with a silent copy
+      // of the chain so the plugin knows exactly when a note was *played*, not when it came out.
+      (async () => {
+        try {
+          const sr = ctx.sampleRate, oc = new OfflineAudioContext(1, Math.round(sr * 0.5), sr);
+          const bf = oc.createBuffer(1, 8, sr); bf.getChannelData(0)[0] = 0.5;
+          const src = oc.createBufferSource(); src.buffer = bf;
+          const c1 = oc.createDynamicsCompressor(); c1.threshold.value = comp.threshold.value; c1.knee.value = comp.knee.value; c1.ratio.value = comp.ratio.value; c1.attack.value = comp.attack.value; c1.release.value = comp.release.value;
+          const c2 = oc.createDynamicsCompressor(); c2.threshold.value = lim.threshold.value; c2.knee.value = lim.knee.value; c2.ratio.value = lim.ratio.value; c2.attack.value = lim.attack.value; c2.release.value = lim.release.value;
+          const gs = oc.createWaveShaper(); gs.curve = guard.curve; gs.oversample = guard.oversample;
+          src.connect(c1); c1.connect(c2); c2.connect(gs); gs.connect(oc.destination); src.start(0.1);
+          const o = (await oc.startRendering()).getChannelData(0); let pk = 0, pi = 0;
+          for (let i = 0; i < o.length; i++) if (Math.abs(o[i]) > pk) { pk = Math.abs(o[i]); pi = i; }
+          if (pk > 0.01) B.chainDelay = (pi - Math.round(0.1 * sr)) / sr;
+        } catch (e) {}
+      })();
+      try {
+        const cb = ctx.createBuffer(1, 8, ctx.sampleRate); cb.getChannelData(0)[0] = 1;
+        const cs = ctx.createBufferSource(); cs.buffer = cb; cal.T = Math.ceil((ctx.currentTime + 0.3) * ctx.sampleRate) / ctx.sampleRate;
+        cs.connect(sp); cs.start(cal.T);
+      } catch (e) { cal.done = true; }
       sp.onaudioprocess = e => {
+        if (!cal.done) {
+          const cl = e.inputBuffer.getChannelData(0), n0 = cl.length;
+          for (let i = 0; i < n0; i++) if (cl[i] > 0.5) {
+            const est = e.playbackTime - n0 / ctx.sampleRate + i / ctx.sampleRate;
+            if (Math.abs(est - cal.T) < 0.5) {
+              B.tapShift = est - cal.T; cal.done = true;
+              for (let c = 0; c < e.inputBuffer.numberOfChannels; c++) e.inputBuffer.getChannelData(c)[i] -= 1;
+            }
+            break;
+          }
+          if (!cal.done && ctx.currentTime > cal.T + 1) cal.done = true;
+        }
         if (!ws || ws.readyState !== 1 || ws.bufferedAmount > 400000) return;
         const l = e.inputBuffer.getChannelData(0), r = e.inputBuffer.getChannelData(e.inputBuffer.numberOfChannels > 1 ? 1 : 0), n = l.length;
-        const buf = new ArrayBuffer(16 + n * 8), v = new DataView(buf), f = new Float32Array(buf, 16, n * 2);
-        v.setUint8(0, 1); v.setUint8(1, 2); v.setUint32(4, ctx.sampleRate, true); v.setUint32(8, n, true); v.setUint32(12, seq++ >>> 0, true);
+        const H = B.v2 ? 24 : 16, buf = new ArrayBuffer(H + n * 8), v = new DataView(buf), f = new Float32Array(buf, H, n * 2);
+        v.setUint8(0, B.v2 ? 3 : 1); v.setUint8(1, 2); v.setUint32(4, ctx.sampleRate, true); v.setUint32(8, n, true); v.setUint32(12, seq++ >>> 0, true);
+        // Where this chunk sits on the page's own clock (seconds), so the plugin can line audio up with the notes it sent.
+        if (B.v2) v.setFloat64(16, e.playbackTime - n / ctx.sampleRate - B.tapShift - B.chainDelay, true);
         for (let i = 0; i < n; i++) { f[i * 2] = l[i]; f[i * 2 + 1] = r[i]; }
         ws.send(buf); B.frames += n;
       };
@@ -2365,16 +2406,29 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
       let w; try { w = new WebSocket('ws://127.0.0.1:' + PORTS[i]); } catch (e) { open(i + 1); return; }
       w.binaryType = 'arraybuffer'; let up = false;
       w.onopen = () => {
-        up = true; ws = w; B.port = PORTS[i]; B.frames = 0;
+        up = true; ws = w; B.port = PORTS[i]; B.frames = 0; B.base = null; B.v2 = false;
         w.send(JSON.stringify({ t: 'hello', app: 'Purple SoundBank', v: 1, sampleRate: ctx.sampleRate }));
         tap(); if (B.muteLocal) localOut(false); set('connected');
       };
       w.onmessage = ev => {
         if (typeof ev.data !== 'string') return;
         let m; try { m = JSON.parse(ev.data); } catch (e) { return; }
-        if (m.t === 'midi' && Array.isArray(m.d) && m.d.length >= 2) { try { unlock(); onMidi({ data: m.d }); } catch (e) {} }
+        if (m.t === 'midi' && Array.isArray(m.d) && m.d.length >= 2) {
+          try {
+            unlock();
+            // Exact timing: the plugin says which sample the note belongs to; it sounds at that moment on the page's clock.
+            if (typeof m.s === 'number' && B.base !== null) { schedAt = Math.max(ctx.currentTime + 0.002, B.base + m.s / (B.hostRate || ctx.sampleRate)); }
+            onMidi({ data: m.d });
+          } catch (e) {}
+          schedAt = null;
+        }
+        else if (m.t === 'sync') {   // the plugin is about to render: agree where its sample clock sits on the page's clock
+          B.hostRate = m.rate || ctx.sampleRate;
+          B.base = ctx.currentTime + (m.look || 0.08) - m.s / B.hostRate;
+          try { ws.send(JSON.stringify({ t: 'base', base: B.base, now: ctx.currentTime })); } catch (e) {}
+        }
         else if (m.t === 'transport') { B.transport = m; B.onChange(); }
-        else if (m.t === 'hello') { B.info = m; B.onChange(); }
+        else if (m.t === 'hello') { B.info = m; B.v2 = (m.v | 0) >= 2; B.onChange(); }
       };
       w.onclose = () => { if (up) { if (ws === w) { ws = null; untap(); localOut(true); } set('searching'); if (want) retry = setTimeout(() => open(0), 1500); } else open(i + 1); };
       w.onerror = () => {};
