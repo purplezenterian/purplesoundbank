@@ -37,8 +37,20 @@
     A.setTitle('Hub');
     const cat = A.query.get('c') || 'all';
     const list = h('div'); const moreWrap = h('div', { class: 'center' }); const vids = h('div'); if (cat === 'showtell') videoGallery(vids);
-    A.render(h('div', { class: 'row', style: 'justify-content:space-between;margin-bottom:12px' }, h('h1', { style: 'font-size:30px;margin:0' }, 'The hub'), h('span', null, h('a', { class: 'btn', href: '#/play', style: 'margin-right:8px' }, 'Open the instrument'), h('a', { class: 'btn', href: '#/mysongs', style: 'margin-right:8px' }, 'My set lists'), h('a', { class: 'btn primary', href: '#/hub/new' }, 'New post'))),
+    const annBox = h('div');   // newest pinned post shows here once, as an announcement
+    A.render(annBox, h('div', { class: 'row', style: 'justify-content:space-between;margin-bottom:12px' }, h('h1', { style: 'font-size:30px;margin:0' }, 'The hub'), h('span', null, h('a', { class: 'btn', href: '#/play', style: 'margin-right:8px' }, 'Open the instrument'), h('a', { class: 'btn', href: '#/mysongs', style: 'margin-right:8px' }, 'My set lists'), h('a', { class: 'btn primary', href: '#/hub/new' }, 'New post'))),
       h('div', { class: 'tabs', role: 'tablist' }, CATS.map(c => h('a', { class: 'tab' + (c[0] === cat ? ' on' : ''), href: '#/hub' + (c[0] === 'all' ? '' : '?c=' + c[0]), role: 'tab' }, c[1]))), vids, list, moreWrap);
+    api.listPosts({ category: null }).then(r => {   // announcement banner: the newest pinned post, until they close it
+      const top = (r.pinned || [])[0]; if (!top) return;
+      let seen = null; try { seen = localStorage.getItem('site.ann'); } catch (e) {}
+      if (String(seen) === String(top.id)) return;
+      const lo = linkOnly(top.body);
+      annBox.replaceChildren(h('div', { class: 'card', style: 'margin-bottom:14px;border-color:var(--glow)' },
+        h('div', { class: 'meta' }, h('span', { class: 'pill pin' }, 'New')),
+        h('h3', { style: 'margin:6px 0' }, top.title), h('p', { class: 'muted', style: 'margin:0 0 10px' }, lo ? '' : String(top.body || '').slice(0, 220)),
+        h('div', { class: 'row' }, h('a', Object.assign({ class: 'btn primary small', href: lo ? lo.href : '#/hub/post/' + top.id }, lo && lo.ext ? { target: '_blank', rel: 'noopener noreferrer' } : {}), 'Read more'),
+          h('button', { class: 'btn small', onclick: () => { try { localStorage.setItem('site.ann', String(top.id)); } catch (e) {} annBox.replaceChildren(); } }, 'Dismiss'))));
+    }).catch(() => {});
     let before = null;
     const load = async () => {
       const r = await api.listPosts({ category: cat === 'all' ? null : cat, before });
