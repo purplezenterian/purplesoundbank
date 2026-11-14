@@ -1,6 +1,11 @@
 #pragma once
 #include <juce_audio_processors/juce_audio_processors.h>
+#include <set>
+#include <map>
 #include "WsServer.h"
+#if PSB_EMBED
+#include "PsbEngine.h"
+#endif
 
 // PSB Bridge: no sounds of its own. The sounds live on the Purple SoundBank hub in the browser.
 // The browser streams its audio here; this plugin plays it into the DAW track and sends the track's MIDI back.
@@ -27,8 +32,8 @@ public:
     void setCurrentProgram (int) override {}
     const juce::String getProgramName (int) override { return {}; }
     void changeProgramName (int, const juce::String&) override {}
-    void getStateInformation (juce::MemoryBlock&) override {}
-    void setStateInformation (const void*, int) override {}
+    void getStateInformation (juce::MemoryBlock&) override;
+    void setStateInformation (const void*, int) override;
 
     // Shown in the plugin window
     // The page can be linked two ways: through the local socket (Chrome) or by living inside the plugin window.
@@ -42,7 +47,41 @@ public:
     juce::String browserName() const;
     float level() const { return meter.load(); }
 
+#if PSB_EMBED
+    // The sound engine lives in the plugin: the page only controls it. Messages from the page arrive here.
+    void nativeText (const juce::String& json);
+    void nativeSound (const juce::String& id, int key, const juce::String& base64);
+    void nativeSoundEnd (const juce::String& id, int count);
+    // MIDI the host plays, handed to the page (for its keys and wheels). Drained on the message thread.
+    struct UiMidi { uint8_t b[3]; uint8_t n; };
+    bool popUiMidi (UiMidi& m);
+    bool popTransport (bool& playing, double& bpm);
+    void sendHave();
+#endif
+
 private:
+#if PSB_EMBED
+    psb::Engine engine;
+    void nativeProcess (juce::AudioBuffer<float>&, juce::MidiBuffer&);
+    void applyConfig (const juce::var& sounds);
+    void queueDecode (const juce::String& id);
+    void loadCached (const juce::String& id);
+    juce::File cacheRoot() const;
+    struct Incoming { std::map<int, juce::MemoryBlock> mp3; };
+    juce::CriticalSection incomingLock;
+    std::map<juce::String, Incoming> incoming;
+    std::set<juce::String> haveIds;
+    std::vector<juce::String> soundIds;
+    juce::ThreadPool loaderPool { 1 };
+    juce::AbstractFifo uiFifo { 2048 };
+    UiMidi uiBuf[2048];
+    std::atomic<bool> playing { false }, transportDirty { false };
+    std::atomic<double> bpmNow { 0.0 };
+    std::atomic<float> nativePeak { 0.0f };
+    bool nativeReady = false;
+    juce::CriticalSection stateLock;
+    juce::String lastCfg, lastSt;
+#endif
     void wsConnected() override;
     void wsDisconnected() override;
     void wsText (const juce::String&) override;

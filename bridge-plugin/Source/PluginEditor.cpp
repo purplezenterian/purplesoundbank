@@ -20,7 +20,7 @@ PSBBridgeEditor::PSBBridgeEditor (PSBBridgeProcessor& p) : AudioProcessorEditor 
 #else
     setSize (520, 300);
 #endif
-    startTimerHz (20);
+    startTimerHz (30);
 }
 PSBBridgeEditor::~PSBBridgeEditor()
 {
@@ -39,6 +39,23 @@ void PSBBridgeEditor::resized()
 }
 
 #if PSB_EMBED
+void PSBBridgeEditor::timerCallback()
+{
+    // What the host plays is shown on the page's keys and wheels (the sound itself is made by the plugin).
+    PSBBridgeProcessor::UiMidi m;
+    int guard = 0;
+    while (guard++ < 64 && proc.popUiMidi (m))
+    {
+        juce::String s = "{\"t\":\"midi\",\"d\":[" + juce::String ((int) m.b[0]);
+        for (int i = 1; i < m.n; ++i) s << "," << (int) m.b[i];
+        s << "]}";
+        emit (s);
+    }
+    bool pl; double bpm;
+    if (proc.popTransport (pl, bpm)) emit ("{\"t\":\"transport\",\"playing\":" + juce::String (pl ? "true" : "false") + ",\"bpm\":" + juce::String (bpm) + "}");
+    repaint();
+}
+
 void PSBBridgeEditor::emit (const juce::String& json)
 {
     if (web) web->emitEventIfBrowserIsVisible ("psb", juce::var (json));
@@ -51,6 +68,8 @@ void PSBBridgeEditor::onPage (const juce::var& v)
         const auto k = o->getProperty ("k").toString();
         const auto d = o->getProperty ("d").toString();
         if (k == "t") proc.pageText (d);
+        else if (k == "snd") proc.nativeSound (o->getProperty ("id").toString(), (int) o->getProperty ("key"), d);
+        else if (k == "sndEnd") proc.nativeSoundEnd (o->getProperty ("id").toString(), (int) o->getProperty ("n"));
         else if (k == "b")
         {
             juce::MemoryOutputStream m;

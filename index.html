@@ -350,6 +350,20 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
     set(k, v) { try { localStorage.setItem('psb.' + k, JSON.stringify(v)); flashSaved(); } catch (e) {} }
   };
 
+  /* ---------- native sound engine (inside the DAW plugin): the plugin makes the sound, this page controls it ---------- */
+  var NAT = { on: false, fromHost: false, have: new Set(), snapT: 0, last: '', _res: null, emb: false };
+  try { NAT.emb = !!(window.__psbPlugin || (window.parent && window.parent.__psbPlugin)); } catch (e) {}
+  NAT.decision = new Promise(res => { NAT._res = res; });
+  if (!NAT.emb) NAT._res();
+  NAT.emit = o => { try { const J = (window.__JUCE__ && window.__JUCE__.backend) || (window.parent && window.parent.__JUCE__ && window.parent.__JUCE__.backend); if (J) J.emitEvent('psb', o); } catch (e) {} };
+  NAT.send = o => NAT.emit({ k: 't', d: JSON.stringify(o) });
+  NAT.give = async ch => {   // hand a sound's recordings to the plugin (it keeps them on this computer after the first time)
+    if (NAT.have.has(ch.id) || !ch.samples) return;
+    const keys = Object.keys(ch.samples);
+    for (const k of keys) { NAT.emit({ k: 'snd', id: ch.id, key: +k, d: ch.samples[k] }); await new Promise(r => setTimeout(r, 0)); }
+    NAT.emit({ k: 'sndEnd', id: ch.id, n: keys.length });
+  };
+
   /* ---------- audio ---------- */
   const AC = window.AudioContext || window.webkitAudioContext;
   const ctx = new AC({ latencyHint: 'interactive' });
@@ -664,8 +678,18 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
   async function loadChannel(ch) {
     if (ch.ready || ch.loading) return;
     ch.loading = true;
+    if (NAT.emb) await NAT.decision;
     try { ch.samples = await fetchSamples(ch); }
     catch (e) { console.warn('Could not load sound', ch.id, e); ch.loading = false; return; }
+    if (NAT.on) {   // the plugin plays this sound itself: it only needs the recordings
+      try { await NAT.give(ch); } catch (e) { console.warn('Could not give sound to plugin', ch.id, e); ch.loading = false; return; }
+      ch.keys = Object.keys(ch.samples).map(Number).sort((a, b) => a - b);
+      ch.ready = ch.keys.length > 0;
+      if (ch.src) ch.samples = null;
+      ch.loading = false;
+      renderPads();
+      return;
+    }
     const ks = Object.keys(ch.samples).map(Number);
     await Promise.all(ks.map(async k => {
       try {
@@ -778,6 +802,12 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
   const monoHeld = [];   // keys held down while a mono sound is on, oldest first (last-note priority)
   function monoActive() { return channels.some(c => c.monoVoice && c.ready && !c.off && !c.mute); }
   function noteOn(src, note, vel, monoOnly) {
+    if (NAT.on) {   // the plugin plays it; this page only shows it
+      const pv = active.get(src); if (pv && !pv.up) noteOff(src);
+      if (!NAT.fromHost) NAT.send({ n: 'on', note, vel });
+      active.set(src, { src, note, parts: [], up: false }); lit(note, 1);
+      return;
+    }
     unlock();
     if (!monoOnly && monoActive()) { const mi = monoHeld.findIndex(h => h.src === src); if (mi >= 0) monoHeld.splice(mi, 1); monoHeld.push({ src, note, vel }); }
     const glideFrom = lastGlideNote; lastGlideNote = note;
@@ -965,6 +995,12 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
   }
 
   function noteOff(src) {
+    if (NAT.on) {
+      const nv = active.get(src); if (!nv || nv.up) return;
+      nv.up = true; active.delete(src); lit(nv.note, -1);
+      if (!NAT.fromHost) NAT.send({ n: 'off', note: nv.note });
+      return;
+    }
     if (active.has('mono:' + src)) noteOff('mono:' + src);
     const mi = monoHeld.findIndex(h => h.src === src);
     if (mi >= 0) {
@@ -2181,6 +2217,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
   const thumbPos = (el, t) => { el.style.top = 'calc(6px + ' + (1 - t) + ' * (100% - 52px))'; };
   function setBend(b) {
     bendVal = Math.max(-1, Math.min(1, b));
+    if (NAT.on && !NAT.fromHost) NAT.send({ n: 'bend', v: Math.max(0, Math.min(16383, Math.round((bendVal + 1) * 8192))) });
     thumbPos($('w-pitch-t'), (bendVal + 1) / 2);
     wp.classList.toggle('live', Math.abs(bendVal) > 0.01);
     if (!ctx) return;
@@ -2189,6 +2226,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
   }
   function setMod(m) {
     modVal = Math.max(0, Math.min(1, m));
+    if (NAT.on && !NAT.fromHost) NAT.send({ n: 'cc', c: 1, v: Math.round(modVal * 127) });
     thumbPos($('w-mod-t'), modVal);
     $('w-mod-f').style.height = (modVal * 100) + '%';
     wm.classList.toggle('live', modVal > 0.01);
@@ -2412,7 +2450,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
             unlock();
             // Exact timing: the plugin says which sample the note belongs to; it sounds at that moment on the page's clock.
             if (typeof m.s === 'number' && B.base !== null) { schedAt = Math.max(ctx.currentTime + 0.002, B.base + m.s / (B.hostRate || ctx.sampleRate)); }
-            onMidi({ data: m.d });
+            NAT.fromHost = true; try { onMidi({ data: m.d }); } finally { NAT.fromHost = false; }
           } catch (e) {}
           schedAt = null;
         }
@@ -2422,7 +2460,11 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
           try { ws.send(JSON.stringify({ t: 'base', base: B.base, now: ctx.currentTime })); } catch (e) {}
         }
         else if (m.t === 'transport') { B.transport = m; B.onChange(); }
-        else if (m.t === 'hello') { B.info = m; B.v2 = (m.v | 0) >= 2; B.onChange(); }
+        else if (m.t === 'have') { NAT.have = new Set(m.ids || []); }
+        else if (m.t === 'hello') {
+          B.info = m; B.v2 = (m.v | 0) >= 2; B.onChange();
+          if (EMB && m.native) NAT.start();
+        }
       }
     function openEmbedded() {
       if (!want) return;
@@ -2436,7 +2478,9 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
       w.onmessage = onMsg;
       ws = w; B.port = 0; B.frames = 0; B.base = null; B.v2 = false;
       w.send(JSON.stringify({ t: 'hello', app: 'Purple SoundBank', v: 1, sampleRate: ctx.sampleRate }));
-      tap(); localOut(false); set('connected');
+      set('connected');
+      // an old plugin (no native engine) still gets the page's audio streamed to it
+      setTimeout(() => { if (!NAT.on && !NAT.started) { tap(); localOut(false); NAT._res(); } }, 3500);
     }
     function open(i) {
       if (!want) return;
@@ -2455,6 +2499,17 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
     B.connect = () => { if (Array.isArray(window.PSB_LOCKED) && window.PSB_LOCKED.length) return; want = true; store.set('bridge.on', true); clearTimeout(retry); if (!ws) { set('searching'); EMB ? openEmbedded() : open(0); } };
     B.disconnect = () => { want = false; store.set('bridge.on', false); clearTimeout(retry); if (ws) { const w = ws; ws = null; try { w.close(); } catch (e) {} } untap(); localOut(true); set('off', null); };
     B.setMute = on => { B.muteLocal = on; store.set('bridge.mute', on); if (ws) localOut(!on); B.onChange(); };
+    NAT.start = () => {
+      if (NAT.started) return;
+      NAT.started = true; NAT.on = true;
+      try { outTrim.gain.value = 0; } catch (e) {}
+      untap(); localOut(false);
+      NAT.send({ n: 'cfg', sounds: (window.SOUNDS || []).map(s => { const o = Object.assign({}, s); delete o.samples; return o; }) });
+      const snap = () => ({ n: 'st', master: master.gain.value, mute: !!masterMuted, fx: { cutoff: fx.cutoff, reso: fx.reso, env: fx.env, glide: fx.glide },
+        ch: channels.map(c => ({ id: c.id, on: !c.mute && !c.off, vol: c.vol, solo: !!c.solo, env: { a: c.env.a, d: c.env.d, s: c.env.s, r: c.env.r }, fxo: { cutoff: c.fxo.cutoff, reso: c.fxo.reso, env: c.fxo.env, glide: c.fxo.glide } })) });
+      NAT.snapT = setInterval(() => { try { const t = JSON.stringify(snap()); if (t !== NAT.last) { NAT.last = t; NAT.emit({ k: 't', d: t }); } } catch (e) {} }, 100);
+      setTimeout(() => NAT._res(), 1500);   // give the plugin a moment to say which sounds it already has
+    };
     window.__psbBridge = B;
     if (EMB) setTimeout(() => B.connect(), 300);
     // In the plugin, quietly save every sound this member can play on this computer, one after another.

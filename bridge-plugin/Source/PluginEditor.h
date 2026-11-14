@@ -20,7 +20,11 @@ private:
     void onPage (const juce::var&);
     std::unique_ptr<juce::WebBrowserComponent> web;
 #endif
+#if PSB_EMBED
+    void timerCallback() override;
+#else
     void timerCallback() override { repaint(); }
+#endif
     PSBBridgeProcessor& proc;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PSBBridgeEditor)
 };

@@ -44,12 +44,14 @@ juce_add_plugin(PSBBridge
 target_sources(PSBBridge PRIVATE
   Source/PluginProcessor.cpp
   Source/PluginEditor.cpp
+  Source/PsbEngine.cpp
   Source/WsServer.cpp)
 
 target_compile_definitions(PSBBridge PUBLIC
   JUCE_WEB_BROWSER=${PSB_WEB}
   PSB_EMBED=${PSB_WEB}
   JUCE_USE_CURL=0
+  JUCE_USE_MP3AUDIOFORMAT=1
   JUCE_VST3_CAN_REPLACE_VST2=0
   JUCE_DISPLAY_SPLASH_SCREEN=0
   JUCE_REPORT_APP_USAGE=0)
@@ -57,6 +59,7 @@ target_compile_definitions(PSBBridge PUBLIC
 target_link_libraries(PSBBridge PRIVATE
   juce::juce_audio_utils
   juce::juce_audio_processors
+  juce::juce_audio_formats
   juce::juce_gui_basics
   juce::juce_gui_extra
   juce::juce_events

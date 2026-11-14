@@ -1,18 +1,39 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
+#if PSB_EMBED
+#include "SoundLoader.h"
+#include "PsbConfig.h"
+#endif
 
 PSBBridgeProcessor::PSBBridgeProcessor()
     : AudioProcessor (BusesProperties().withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
       ringL ((size_t) ringSize, 0.0f), ringR ((size_t) ringSize, 0.0f),
       server (*this, 48210, 48219)
 {
+#if PSB_EMBED
+    engine.prepare (48000.0);
+#else
     server.start();
+#endif
 }
 
-PSBBridgeProcessor::~PSBBridgeProcessor() { server.stop(); }
+PSBBridgeProcessor::~PSBBridgeProcessor()
+{
+#if PSB_EMBED
+    loaderPool.removeAllJobs (true, 8000);
+#else
+    server.stop();
+#endif
+}
 
 void PSBBridgeProcessor::prepareToPlay (double sampleRate, int)
 {
+#if PSB_EMBED
+    engine.prepare (sampleRate);
+    setLatencySamples (engine.latencySamples());
+    hostRate = sampleRate;
+    return;
+#endif
     hostRate = sampleRate;
     flushRequest.store (true);
     // While the host bounces (offline), this plugin runs at real time and the browser's sound arrives a little late.
@@ -55,9 +76,12 @@ void PSBBridgeProcessor::setPageSink (std::function<void (const juce::String&)> 
 void PSBBridgeProcessor::pageText (const juce::String& text)
 {
     lastPageMs.store (juce::Time::getMillisecondCounter());
+#if PSB_EMBED
+    if (text.startsWith ("{\"n\":")) { nativeText (text); return; }
+#endif
     wsText (text);
     if (text.contains ("\"hello\""))
-        sendToBrowser ("{\"t\":\"hello\",\"v\":2,\"plugin\":\"PSB Bridge\",\"embedded\":true}");
+        sendToBrowser ("{\"t\":\"hello\",\"v\":2,\"plugin\":\"PSB Bridge\",\"embedded\":true" + juce::String (PSB_EMBED ? ",\"native\":true" : "") + "}");
 }
 
 void PSBBridgeProcessor::pageBinary (const uint8_t* d, size_t size)
@@ -129,6 +153,10 @@ void PSBBridgeProcessor::wsBinary (const uint8_t* d, size_t size)
 
 void PSBBridgeProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
 {
+#if PSB_EMBED
+    nativeProcess (buffer, midi);
+    return;
+#endif
     juce::ScopedNoDenormals noDenormals;
     const int n = buffer.getNumSamples();
     auto* outL = buffer.getWritePointer (0);
@@ -277,6 +305,217 @@ void PSBBridgeProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::M
     meter.store (juce::jmax (peak, meter.load() * 0.9f));
 }
 
+#if PSB_EMBED
+// ================================================================================================
+// Native engine: the plugin makes the sound itself, inside the host's own audio callback.
+// ================================================================================================
+juce::File PSBBridgeProcessor::cacheRoot() const
+{
+    return juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory)
+        .getChildFile ("Purple SoundBank").getChildFile ("PSB Bridge").getChildFile ("sounds");
+}
+
+void PSBBridgeProcessor::applyConfig (const juce::var& sounds)
+{
+    auto defs = psb::parseSounds (sounds);
+    if (defs.empty()) return;
+    engine.defineSounds (defs);
+    soundIds.clear();
+    for (auto& d : defs) soundIds.push_back (juce::String (d.id));
+    nativeReady = true;
+    for (auto& id : soundIds) loadCached (id);
+    sendHave();
+}
+
+void PSBBridgeProcessor::sendHave()
+{
+    juce::String s = "{\"t\":\"have\",\"ids\":[";
+    {
+        juce::ScopedLock sl (incomingLock);
+        bool first = true;
+        for (auto& id : haveIds) { if (! first) s << ","; first = false; s << "\"" << id << "\""; }
+    }
+    s << "]}";
+    sendToBrowser (s);
+}
+
+void PSBBridgeProcessor::loadCached (const juce::String& id)
+{
+    loaderPool.addJob ([this, id]
+    {
+        const auto dir = cacheRoot().getChildFile (id);
+        if (! dir.getChildFile ("ok").existsAsFile()) return;
+        std::map<int, psb::Pcm> m;
+        for (const auto& f : dir.findChildFiles (juce::File::findFiles, false, "*.mp3"))
+        {
+            juce::MemoryBlock mb;
+            if (! f.loadFileAsData (mb)) continue;
+            psb::Pcm p;
+            if (psb::decodeMp3 (mb.getData(), mb.getSize(), p)) m[f.getFileNameWithoutExtension().getIntValue()] = std::move (p);
+        }
+        if (m.empty()) return;
+        const std::string sid = id.toStdString();
+        engine.prepareSamples (sid, m);
+        engine.installSamples (sid, std::move (m));
+        { juce::ScopedLock sl (incomingLock); haveIds.insert (id); }
+        juce::MessageManager::callAsync ([this] { sendHave(); });
+        return;
+    });
+}
+
+void PSBBridgeProcessor::nativeSound (const juce::String& id, int key, const juce::String& base64)
+{
+    juce::MemoryOutputStream out;
+    if (! juce::Base64::convertFromBase64 (out, base64)) return;
+    juce::ScopedLock sl (incomingLock);
+    incoming[id].mp3[key] = out.getMemoryBlock();
+}
+
+void PSBBridgeProcessor::nativeSoundEnd (const juce::String& id, int)
+{
+    Incoming got;
+    {
+        juce::ScopedLock sl (incomingLock);
+        auto it = incoming.find (id);
+        if (it == incoming.end()) return;
+        got = std::move (it->second);
+        incoming.erase (it);
+    }
+    auto shared = std::make_shared<Incoming> (std::move (got));
+    loaderPool.addJob ([this, id, shared]
+    {
+        std::map<int, psb::Pcm> m;
+        const auto dir = cacheRoot().getChildFile (id);
+        dir.createDirectory();
+        dir.getChildFile ("ok").deleteFile();
+        for (auto& kv : shared->mp3)
+        {
+            dir.getChildFile (juce::String (kv.first) + ".mp3").replaceWithData (kv.second.getData(), kv.second.getSize());
+            psb::Pcm p;
+            if (psb::decodeMp3 (kv.second.getData(), kv.second.getSize(), p)) m[kv.first] = std::move (p);
+        }
+        if (m.empty()) return;
+        dir.getChildFile ("ok").replaceWithText ("1");
+        const std::string sid = id.toStdString();
+        engine.prepareSamples (sid, m);
+        engine.installSamples (sid, std::move (m));
+        { juce::ScopedLock sl (incomingLock); haveIds.insert (id); }
+        juce::MessageManager::callAsync ([this] { sendHave(); });
+        return;
+    });
+}
+
+void PSBBridgeProcessor::nativeText (const juce::String& json)
+{
+    const auto v = juce::JSON::parse (json);
+    auto* o = v.getDynamicObject();
+    if (! o) return;
+    const auto n = o->getProperty ("n").toString();
+    if (n == "cfg") { { juce::ScopedLock sl (stateLock); lastCfg = json; } applyConfig (o->getProperty ("sounds")); return; }
+    if (n == "on") { engine.noteOn ((int) o->getProperty ("note"), (int) o->getProperty ("vel")); return; }
+    if (n == "off") { engine.noteOff ((int) o->getProperty ("note")); return; }
+    if (n == "bend") { engine.pitchBend ((int) o->getProperty ("v")); return; }
+    if (n == "cc") { engine.controller ((int) o->getProperty ("c"), (int) o->getProperty ("v")); return; }
+    if (n == "st") { { juce::ScopedLock sl (stateLock); lastSt = json; } psb::applyState (engine, o); return; }
+}
+
+bool PSBBridgeProcessor::popUiMidi (UiMidi& m)
+{
+    int s1, n1, s2, n2;
+    uiFifo.prepareToRead (1, s1, n1, s2, n2);
+    if (n1 + n2 <= 0) return false;
+    m = uiBuf[n1 > 0 ? s1 : s2];
+    uiFifo.finishedRead (1);
+    return true;
+}
+
+bool PSBBridgeProcessor::popTransport (bool& p, double& bpm)
+{
+    if (! transportDirty.exchange (false)) return false;
+    p = playing.load(); bpm = bpmNow.load();
+    return true;
+}
+
+void PSBBridgeProcessor::nativeProcess (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
+{
+    juce::ScopedNoDenormals noDenormals;
+    const int n = buffer.getNumSamples();
+    if (buffer.getNumChannels() < 1) return;
+    float* L = buffer.getWritePointer (0);
+    float* R = buffer.getNumChannels() > 1 ? buffer.getWritePointer (1) : L;
+
+    int pos = 0;
+    for (const auto meta : midi)
+    {
+        const int sp = juce::jlimit (0, n, meta.samplePosition);
+        if (sp > pos) { engine.render (L + pos, R + pos, sp - pos); pos = sp; }
+        const auto m = meta.getMessage();
+        if (m.isNoteOn()) engine.noteOn (m.getNoteNumber(), m.getVelocity());
+        else if (m.isNoteOff()) engine.noteOff (m.getNoteNumber());
+        else if (m.isController()) engine.controller (m.getControllerNumber(), m.getControllerValue());
+        else if (m.isPitchWheel()) engine.pitchBend (m.getPitchWheelValue());
+        else if (m.isAllNotesOff() || m.isAllSoundOff()) engine.allNotesOff();
+        // the page shows what the host plays (keys, wheels): it does not make sound
+        if (m.getRawDataSize() >= 1 && m.getRawDataSize() <= 3)
+        {
+            int s1, n1, s2, n2;
+            uiFifo.prepareToWrite (1, s1, n1, s2, n2);
+            if (n1 + n2 > 0)
+            {
+                UiMidi& u = uiBuf[n1 > 0 ? s1 : s2];
+                u.n = (uint8_t) m.getRawDataSize();
+                for (int i = 0; i < u.n; ++i) u.b[i] = m.getRawData()[i];
+                uiFifo.finishedWrite (1);
+            }
+        }
+    }
+    if (pos < n) engine.render (L + pos, R + pos, n - pos);
+    midi.clear();
+
+    float pk = 0.0f;
+    for (int i = 0; i < n; i += 4) pk = juce::jmax (pk, std::abs (L[i]), std::abs (R[i]));
+    nativePeak.store (juce::jmax (pk, nativePeak.load() * 0.9f));
+    meter.store (nativePeak.load());
+    if (auto* ph = getPlayHead())
+        if (auto p = ph->getPosition())
+        {
+            const bool pl = p->getIsPlaying();
+            const double b = p->getBpm().orFallback (0.0);
+            if (pl != playing.load() || std::abs (b - bpmNow.load()) > 0.01) { playing.store (pl); bpmNow.store (b); transportDirty.store (true); }
+        }
+}
+#endif
+
 juce::AudioProcessorEditor* PSBBridgeProcessor::createEditor() { return new PSBBridgeEditor (*this); }
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter() { return new PSBBridgeProcessor(); }
+
+// The host saves the project with the sound set-up inside, so it comes back the way it was (no window needed).
+void PSBBridgeProcessor::getStateInformation (juce::MemoryBlock& dest)
+{
+#if PSB_EMBED
+    juce::ScopedLock sl (stateLock);
+    auto* o = new juce::DynamicObject();
+    o->setProperty ("cfg", lastCfg);
+    o->setProperty ("st", lastSt);
+    const auto s = juce::JSON::toString (juce::var (o));
+    dest.append (s.toRawUTF8(), s.getNumBytesAsUTF8());
+#else
+    juce::ignoreUnused (dest);
+#endif
+}
+
+void PSBBridgeProcessor::setStateInformation (const void* data, int size)
+{
+#if PSB_EMBED
+    const auto v = juce::JSON::parse (juce::String::fromUTF8 (static_cast<const char*> (data), size));
+    if (auto* o = v.getDynamicObject())
+    {
+        const auto cfg = o->getProperty ("cfg").toString(), st = o->getProperty ("st").toString();
+        if (cfg.isNotEmpty()) nativeText (cfg);
+        if (st.isNotEmpty()) nativeText (st);
+    }
+#else
+    juce::ignoreUnused (data, size);
+#endif
+}
