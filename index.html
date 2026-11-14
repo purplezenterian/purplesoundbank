@@ -821,7 +821,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
     // Mono sounds (basses, leads): a new note cuts the one still sounding, so only one voice plays at a time.
     // Mono sounds: a new note takes over from the one still sounding. If one is sounding the move is legato: the old note
     // melts away while the new one comes in softly from the steady part of the sound, with no fresh attack.
-    for (const mc of channels) { mc.legatoNow = false; mc.reuse = null; mc.quick = !!mc.glideVoice && (t - (mc.lastOn || -9)) < 0.04; if (mc.monoVoice && mc.ready && !mc.off && !mc.mute) for (const o of [...active.values(), ...sustained]) for (const p of o.parts) if (p.ch === mc && !p.dead) { const hard = mc.retrig || (mc.retrigVel && vel >= mc.retrigVel); mc.legatoNow = !(hard || mc.quick); if (mc.glideVoice && !hard && Math.abs(note + mc.shift - p.k) <= 6) { (mc.reuse = mc.reuse || []).push({ p, o }); continue; } try { if (mc.holdFix) holdAt(p.g.gain, t); else { p.g.gain.cancelScheduledValues(t); p.g.gain.setValueAtTime(p.g.gain.value, t); } p.dead = true; p.g.gain.setTargetAtTime(0, t, (hard || mc.quick) ? 0.004 : mc.legato ? mc.legato.out : 0.022); p.s.stop(t + ((hard || mc.quick) ? 0.05 : mc.legato ? 8 * mc.legato.out : 0.2)); } catch (e) {} } }
+    for (const mc of channels) { mc.legatoNow = false; mc.reuse = null; mc.quick = !!mc.glideVoice && (t - (mc.lastOn || -9)) < 0.04; if (mc.monoVoice && mc.ready && !mc.off && !mc.mute) for (const o of [...active.values(), ...sustained]) for (const p of o.parts) if (p.ch === mc && !p.dead) { const hard = mc.retrig || (mc.retrigVel && vel >= mc.retrigVel); mc.legatoNow = !(hard || mc.quick); if (mc.glideVoice && !hard && Math.abs(note + mc.shift - p.k) <= 24) { (mc.reuse = mc.reuse || []).push({ p, o }); continue; } try { if (mc.holdFix) holdAt(p.g.gain, t); else { p.g.gain.cancelScheduledValues(t); p.g.gain.setValueAtTime(p.g.gain.value, t); } p.dead = true; p.g.gain.setTargetAtTime(0, t, (hard || mc.quick) ? 0.004 : mc.legato ? mc.legato.out : 0.022); p.s.stop(t + ((hard || mc.quick) ? 0.05 : mc.legato ? 8 * mc.legato.out : 0.2)); } catch (e) {} } }
     const shape = velShape(note, vel);
     const amp = shape.amp;
     const parts = [];
@@ -902,7 +902,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
       else vf.frequency.value = hv ? hv.cut : shape.cut;
       const sm = ctx.createBiquadFilter();
       sm.type = 'peaking'; sm.frequency.value = 3500; sm.Q.value = 0.9; sm.gain.value = hv ? hv.smack : shape.smack;
-      if (biteDb) {   // the top end bites hardest at the very start
+      if (biteDb && !(lg && ch.slideRate)) {   // the top end bites hardest at the very start (legato notes of the glide sounds have no fresh attack)
         const base = hv ? hv.smack : shape.smack;
         sm.gain.setValueAtTime(base + biteDb * 0.9, t);
         sm.gain.setTargetAtTime(base, t + 0.004, 0.09);
