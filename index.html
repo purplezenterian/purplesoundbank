@@ -821,7 +821,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
     // Mono sounds (basses, leads): a new note cuts the one still sounding, so only one voice plays at a time.
     // Mono sounds: a new note takes over from the one still sounding. If one is sounding the move is legato: the old note
     // melts away while the new one comes in softly from the steady part of the sound, with no fresh attack.
-    for (const mc of channels) { mc.legatoNow = false; mc.reuse = null; if (mc.monoVoice && mc.ready && !mc.off && !mc.mute) for (const o of [...active.values(), ...sustained]) for (const p of o.parts) if (p.ch === mc && !p.dead) { const hard = mc.retrig || (mc.retrigVel && vel >= mc.retrigVel); mc.legatoNow = !hard; if (mc.glideVoice && !hard && Math.abs(note + mc.shift - p.k) <= 6) { (mc.reuse = mc.reuse || []).push({ p, o }); continue; } try { if (mc.holdFix) holdAt(p.g.gain, t); else { p.g.gain.cancelScheduledValues(t); p.g.gain.setValueAtTime(p.g.gain.value, t); } p.dead = true; p.g.gain.setTargetAtTime(0, t, hard ? 0.004 : mc.legato ? mc.legato.out : 0.022); p.s.stop(t + (hard ? 0.05 : mc.legato ? 8 * mc.legato.out : 0.2)); } catch (e) {} } }
+    for (const mc of channels) { mc.legatoNow = false; mc.reuse = null; mc.quick = !!mc.glideVoice && (t - (mc.lastOn || -9)) < 0.04; if (mc.monoVoice && mc.ready && !mc.off && !mc.mute) for (const o of [...active.values(), ...sustained]) for (const p of o.parts) if (p.ch === mc && !p.dead) { const hard = mc.retrig || (mc.retrigVel && vel >= mc.retrigVel); mc.legatoNow = !(hard || mc.quick); if (mc.glideVoice && !hard && Math.abs(note + mc.shift - p.k) <= 6) { (mc.reuse = mc.reuse || []).push({ p, o }); continue; } try { if (mc.holdFix) holdAt(p.g.gain, t); else { p.g.gain.cancelScheduledValues(t); p.g.gain.setValueAtTime(p.g.gain.value, t); } p.dead = true; p.g.gain.setTargetAtTime(0, t, (hard || mc.quick) ? 0.004 : mc.legato ? mc.legato.out : 0.022); p.s.stop(t + ((hard || mc.quick) ? 0.05 : mc.legato ? 8 * mc.legato.out : 0.2)); } catch (e) {} } }
     const shape = velShape(note, vel);
     const amp = shape.amp;
     const parts = [];
@@ -831,13 +831,16 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
       if (!ch.ready || ch.off || ch.mute || (anySoloNow && !ch.solo) || (monoOnly && !ch.monoVoice)) continue;
       const nt = note + ch.shift;   // per-sound transpose (semitones)
       const k = nearest(ch.keys, nt);
+      if (ch.monoVoice) ch.lastOn = t;
       if (ch.reuse) {
         // Glide voice: a note played over a sounding one does not start a new voice. The same voice slides to the new pitch, so it moves like one continuous note.
         for (const { p, o } of ch.reuse) {
           const dN = nt - p.nt0, tau = ch.glideTau;
           p.off = dN;
-          holdAt(p.s.detune, t); p.s.detune.setTargetAtTime(bendVal * 200 + dN * 100, t, tau);
-          if (p.lvg && ch.slideLevel) { holdAt(p.lvg.gain, t); p.lvg.gain.setTargetAtTime(Math.pow(10, (slideLv(ch.slideLevel, nt) - slideLv(ch.slideLevel, p.k)) / 20), t, tau); }
+          holdAt(p.s.detune, t);
+          if (ch.quick) p.s.detune.setValueAtTime(bendVal * 200 + dN * 100, t);   // two keys hit together: no slide, the pitch just lands on the new key
+          else p.s.detune.setTargetAtTime(bendVal * 200 + dN * 100, t, tau);
+          if (p.lvg && ch.slideLevel) { holdAt(p.lvg.gain, t); const lgT = Math.pow(10, (slideLv(ch.slideLevel, nt) - slideLv(ch.slideLevel, p.k)) / 20); if (ch.quick) p.lvg.gain.setValueAtTime(lgT, t); else p.lvg.gain.setTargetAtTime(lgT, t, tau); }
           o.parts = o.parts.filter(x => x !== p); parts.push(p);
         }
         ch.reuse = null; continue;
