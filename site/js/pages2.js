@@ -41,7 +41,7 @@
     const annBox = h('div');   // newest pinned post shows here once, as an announcement
     A.render(patchBox, annBox, h('div', { class: 'row', style: 'justify-content:space-between;margin-bottom:12px' }, h('h1', { style: 'font-size:30px;margin:0' }, 'The hub'), h('span', null, h('a', { class: 'btn', href: '#/play', style: 'margin-right:8px' }, 'Open the instrument'), h('a', { class: 'btn', href: '#/mysongs', style: 'margin-right:8px' }, 'My set lists'), h('a', { class: 'btn primary', href: '#/hub/new' }, 'New post'))),
       h('div', { class: 'tabs', role: 'tablist' }, CATS.map(c => h('a', { class: 'tab' + (c[0] === cat ? ' on' : ''), href: '#/hub' + (c[0] === 'all' ? '' : '?c=' + c[0]), role: 'tab' }, c[1]))), vids, list, moreWrap);
-    fetch('../sounds.json?t=' + Date.now(), { cache: 'no-store' }).then(r => r.json()).then(list => {   // "N new patches": sounds this device has not seen yet
+    const checkPatches = () => fetch('../sounds.json?t=' + Date.now(), { cache: 'no-store' }).then(r => r.json()).then(list => {   // "N new patches": sounds this device has not seen yet
       let seen = null; try { seen = JSON.parse(localStorage.getItem('site.sounds.seen') || 'null'); } catch (e) {}
       const ids = list.map(x => x.id), mark = () => { try { localStorage.setItem('site.sounds.seen', JSON.stringify(ids)); } catch (e) {} };
       if (!Array.isArray(seen)) { mark(); return; }   // first visit on this device: nothing is "new" yet
@@ -51,7 +51,7 @@
           h('div', null, h('div', { style: 'font-weight:700;font-size:18px' }, '\u2728 ' + fresh.length + ' new patch' + (fresh.length === 1 ? '' : 'es')), h('div', { class: 'muted small' }, fresh.map(x => x.name).join(' \u2022 '))),
           h('span', null, h('a', { class: 'btn primary small', href: '#/play', style: 'margin-right:8px', onclick: mark }, 'Try them'), h('button', { class: 'btn small', onclick: () => { mark(); patchBox.replaceChildren(); } }, 'Dismiss')))));
     }).catch(() => {});
-    api.listPosts({ category: null }).then(r => {   // announcement banner: the newest pinned text post, shown in full, until they close it
+    const checkAnn = () => api.listPosts({ category: null }).then(r => {   // announcement banner: the newest pinned text post, shown in full, until they close it
       const top = (r.pinned || []).find(x => !linkOnly(x.body)); if (!top) return;
       let seen = null; try { seen = localStorage.getItem('site.ann'); } catch (e) {}
       if (String(seen) === String(top.id)) return;
@@ -60,6 +60,7 @@
           h('div', null, h('div', { style: 'font-weight:700;font-size:18px;margin-bottom:4px' }, top.title), h('div', { style: 'white-space:pre-wrap' }, String(top.body || ''))),
           h('button', { class: 'btn small', onclick: () => { try { localStorage.setItem('site.ann', String(top.id)); } catch (e) {} annBox.replaceChildren(); } }, 'Dismiss'))));
     }).catch(() => {});
+    checkPatches(); checkAnn(); A.every(() => { checkPatches(); checkAnn(); }, 30000);   // new patches / announcements appear on their own while the hub is open
     let before = null;
     const load = async () => {
       const r = await api.listPosts({ category: cat === 'all' ? null : cat, before });
