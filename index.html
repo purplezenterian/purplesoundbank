@@ -267,6 +267,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
 .song.drop-before { box-shadow: 0 -3px 0 #d9c2ff; }
 .song.drop-end { box-shadow: 0 3px 0 #d9c2ff; }
 .song .nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.song.locked { opacity: .65; color: #b9a3ee; }
 .song.on { background: rgba(var(--glow-rgb), .3); border-color: var(--glow); color: #fff; text-shadow: 0 0 8px rgba(var(--glow-rgb), 1); }
 .song .ed { display: none; gap: 3px; }
 .perf.editing .song .ed { display: flex; }
@@ -1932,9 +1933,14 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
 
   /* ---------- songs: Patch / Performance ---------- */
   let songs = store.get('songs', []);
+  // Paid-plan set lists: the member page carries them (window.PSB_PAIDSONGS); the free-month page only lists them with a padlock (window.PSB_LOCKEDSONGS).
+  // They are never saved into the member's own list, so they disappear again if the plan ends.
+  const PAIDSONGS = Array.isArray(window.PSB_PAIDSONGS) ? window.PSB_PAIDSONGS : [], LOCKEDSONGS = Array.isArray(window.PSB_LOCKEDSONGS) ? window.PSB_LOCKEDSONGS : [];
+  const songFresh = s => { const t = Date.parse((s && s.added) || ''); return t > 0 && Date.now() < t + 7 * 864e5; };   // the "new" tag lasts 7 days
+  songs = songs.filter(x => !x.paid).concat(PAIDSONGS.map(x => Object.assign({}, x, { paid: true })));
   let curSong = store.get('curSong', null);
   let perfMode = false, perfEdit = false;
-  const saveSongs = () => { store.set('songs', songs); store.set('curSong', curSong); };
+  const saveSongs = () => { store.set('songs', songs.filter(x => !x.paid)); store.set('curSong', curSong); };
   function songSnap() {
     const o = snap();
     o.order = order.slice(); o.off = [...off]; o.focus = focusCh ? focusCh.id : null;
@@ -2040,20 +2046,31 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
       row.setAttribute('role', 'button'); row.tabIndex = 0;
       const no = document.createElement('span'); no.className = 'no'; no.textContent = i + 1;
       const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = s.name;
+      if (s.paid && songFresh(s)) { const nt = document.createElement('span'); nt.className = 'newtag'; nt.textContent = 'new'; nm.append(' ', nt); }
       const ed = document.createElement('span'); ed.className = 'ed';
       const mk = (txt, cls, fn) => { const b = document.createElement('span'); b.textContent = txt; if (cls) b.className = cls; b.addEventListener('click', e => { e.stopPropagation(); fn(); }); ed.appendChild(b); };
       mk('▲', '', () => { if (i > 0) { [songs[i - 1], songs[i]] = [songs[i], songs[i - 1]]; saveSongs(); renderPerf(); } });
       mk('▼', '', () => { if (i < songs.length - 1) { [songs[i + 1], songs[i]] = [songs[i], songs[i + 1]]; saveSongs(); renderPerf(); } });
-      mk('⧉', '', () => {
+      if (!s.paid) mk('⧉', '', () => {
         const copy = { id: 's' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), name: (s.name + ' copy').slice(0, 40), data: JSON.parse(JSON.stringify(s.data)) };
         songs.splice(i + 1, 0, copy); saveSongs(); renderPerf();
       });
-      mk('✎', '', () => nameDialog('Rename song', s.name, [{ label: 'Rename', fn: v => { s.name = v; saveSongs(); renderPerf(); } }]));
-      mk('✕', 'x', () => nameDialog('Delete “' + s.name + '”?', null, [{ label: 'Delete', cls: 'rm', fn: () => { songs = songs.filter(x => x !== s); if (curSong === s.id) curSong = null; saveSongs(); renderPerf(); } }]));
+      if (!s.paid) mk('✎', '', () => nameDialog('Rename song', s.name, [{ label: 'Rename', fn: v => { s.name = v; saveSongs(); renderPerf(); } }]));
+      if (!s.paid) mk('✕', 'x', () => nameDialog('Delete “' + s.name + '”?', null, [{ label: 'Delete', cls: 'rm', fn: () => { songs = songs.filter(x => x !== s); if (curSong === s.id) curSong = null; saveSongs(); renderPerf(); } }]));
       row.append(no, nm, ed);
       row.addEventListener('click', () => { if (performance.now() - songDragEnd < 400) return; recallSong(s.id); });
       row.addEventListener('pointerdown', e => beginSongDrag(e, row, i));
       row.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); recallSong(s.id); } });
+      list.appendChild(row);
+    });
+    LOCKEDSONGS.forEach(s => {   // set lists that need a full plan: shown with a padlock; tapping asks the website to start the plan
+      const row = document.createElement('div'); row.className = 'song locked'; row.setAttribute('role', 'button'); row.tabIndex = 0;
+      const no = document.createElement('span'); no.className = 'no'; no.textContent = '\uD83D\uDD12';
+      const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = s.name;
+      if (songFresh(s)) { const nt = document.createElement('span'); nt.className = 'newtag'; nt.textContent = 'new'; nm.append(' ', nt); }
+      row.append(no, nm);
+      const ask = () => { try { window.parent.postMessage({ psb: 'upgrade', sound: s.id }, '*'); } catch (e) {} };
+      row.addEventListener('click', ask); row.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); ask(); } });
       list.appendChild(row);
     });
     const on = list.querySelector('.song.on'); if (on) list.scrollTop = Math.max(0, on.offsetTop - list.offsetTop);   // current song at the top, the next ones below it
