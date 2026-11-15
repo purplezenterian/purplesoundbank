@@ -2252,6 +2252,16 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1
     const o = QWERTY[e.key.toLowerCase()];
     if (o !== undefined) noteOff('k' + o);
   });
+  // Number keys 1 to 8 press the 8 patch pads (the same as tapping them).
+  window.addEventListener('keydown', e => {
+    if (e.repeat || e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
+    if (!/^[1-8]$/.test(e.key)) return;
+    const tg = e.target, tag = tg && tg.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (tg && tg.isContentEditable)) return;
+    if (menuEl.classList.contains('open')) return;
+    const pad = padsEl.children[+e.key - 1]; if (!pad) return;
+    e.preventDefault(); pad.click();
+  });
 
   /* ---------- MIDI ---------- */
   let midiBusy = false;
